@@ -4,15 +4,15 @@ use crate::{
 };
 
 #[derive(Clone, Default)]
-pub struct Visitor;
+pub struct CheckingVisitor;
 
 #[derive(Clone)]
-pub struct VisitorData {
+pub struct CheckingVisitorData {
     error: Option<String>,
     involved_vars: InvolvedVars,
 }
 
-impl VisitorData {
+impl CheckingVisitorData {
     fn new_error(message: String) -> Self {
         Self {
             error: Some(message),
@@ -35,13 +35,13 @@ impl VisitorData {
     }
 }
 
-impl BottomUpVisitor<VisitorData> for Visitor {
+impl BottomUpVisitor<CheckingVisitorData> for CheckingVisitor {
     fn merge_for_and(
         &self,
         _ddnnf: &DecisionDNNF,
         path: &[usize],
-        children: Vec<(&[Literal], VisitorData)>,
-    ) -> VisitorData {
+        children: Vec<(&[Literal], CheckingVisitorData)>,
+    ) -> CheckingVisitorData {
         if let Some(error) = get_error(&children) {
             return error;
         }
@@ -58,29 +58,29 @@ impl BottomUpVisitor<VisitorData> for Visitor {
                 let mut intersection = involved_in_children[i].clone();
                 intersection.and_assign(&involved_in_children[j]);
                 if intersection.any() {
-                    return VisitorData::new_error(format!(
+                    return CheckingVisitorData::new_error(format!(
                         "AND children share variables (AND node index is {})",
                         path.last().unwrap()
                     ));
                 }
             }
         }
-        VisitorData::new_involved_vars(InvolvedVars::union(involved_in_children))
+        CheckingVisitorData::new_involved_vars(InvolvedVars::union(involved_in_children))
     }
 
     fn merge_for_or(
         &self,
         ddnnf: &DecisionDNNF,
         path: &[usize],
-        children: Vec<(&[Literal], VisitorData)>,
-    ) -> VisitorData {
+        children: Vec<(&[Literal], CheckingVisitorData)>,
+    ) -> CheckingVisitorData {
         if let Some(error) = get_error(&children) {
             return error;
         }
         for i in 0..children.len() - 1 {
             for j in i + 1..children.len() {
                 if !are_contradictory(children[i].0, children[j].0) {
-                    return VisitorData::new_error(format!("OR children at indices {i} and {j} may not be contradictory (OR node index is {})", path.last()
+                    return CheckingVisitorData::new_error(format!("OR children at indices {i} and {j} may not be contradictory (OR node index is {})", path.last()
                 .unwrap()));
                 }
             }
@@ -93,19 +93,19 @@ impl BottomUpVisitor<VisitorData> for Visitor {
                 acc
             },
         );
-        VisitorData::new_involved_vars(involved_vars)
+        CheckingVisitorData::new_involved_vars(involved_vars)
     }
 
-    fn new_for_true(&self, ddnnf: &DecisionDNNF, _path: &[usize]) -> VisitorData {
-        VisitorData::new_for_leaf(ddnnf.n_vars())
+    fn new_for_true(&self, ddnnf: &DecisionDNNF, _path: &[usize]) -> CheckingVisitorData {
+        CheckingVisitorData::new_for_leaf(ddnnf.n_vars())
     }
 
-    fn new_for_false(&self, ddnnf: &DecisionDNNF, _path: &[usize]) -> VisitorData {
-        VisitorData::new_for_leaf(ddnnf.n_vars())
+    fn new_for_false(&self, ddnnf: &DecisionDNNF, _path: &[usize]) -> CheckingVisitorData {
+        CheckingVisitorData::new_for_leaf(ddnnf.n_vars())
     }
 }
 
-fn get_error(children: &[(&[Literal], VisitorData)]) -> Option<VisitorData> {
+fn get_error(children: &[(&[Literal], CheckingVisitorData)]) -> Option<CheckingVisitorData> {
     children
         .iter()
         .position(|(_, child)| child.error.is_some())
@@ -125,7 +125,7 @@ mod tests {
     fn test_not_decomposable() {
         let str_ddnnf = "a 1 0\nt 2 0\n1 2 1 0\n1 2 -1 0";
         let ddnnf = D4Reader::read(str_ddnnf.as_bytes()).unwrap();
-        let traversal = BottomUpTraversal::new(Box::<Visitor>::default());
+        let traversal = BottomUpTraversal::new(Box::<CheckingVisitor>::default());
         let result = traversal.traverse(&ddnnf);
         assert_eq!(
             "AND children share variables (AND node index is 0)",
@@ -137,7 +137,7 @@ mod tests {
     fn test_not_determinist() {
         let str_ddnnf = "o 1 0\nt 2 0\n1 2 1 0\n1 2 1 0";
         let ddnnf = D4Reader::read(str_ddnnf.as_bytes()).unwrap();
-        let traversal = BottomUpTraversal::new(Box::<Visitor>::default());
+        let traversal = BottomUpTraversal::new(Box::<CheckingVisitor>::default());
         let result = traversal.traverse(&ddnnf);
         assert_eq!(
             "OR children at indices 0 and 1 may not be contradictory (OR node index is 0)",
@@ -150,7 +150,7 @@ mod tests {
         let str_ddnnf =
             "a 1 0\no 2 0\no 3 0\nt 4 0\n1 2 0\n1 3 0\n2 4 -1 0\n2 4 1 0\n3 4 -2 0\n3 4 2 0\n";
         let ddnnf = D4Reader::read(str_ddnnf.as_bytes()).unwrap();
-        let traversal = BottomUpTraversal::new(Box::<Visitor>::default());
+        let traversal = BottomUpTraversal::new(Box::<CheckingVisitor>::default());
         let result = traversal.traverse(&ddnnf);
         assert!(result.error.is_none());
     }

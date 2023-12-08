@@ -4,30 +4,37 @@ use crate::{
 };
 use rug::Integer;
 
+/// A bottom-up visitor used for the model counting algorithm.
 #[derive(Default)]
-pub struct Visitor;
+pub struct ModelCountingVisitor;
 
-struct VisitorData {
+/// The data used by the [`ModelCountingVisitor`] structure.
+pub struct ModelCountingVisitorData {
     n_models: Integer,
     involved_vars: InvolvedVars,
 }
 
-impl VisitorData {
+impl ModelCountingVisitorData {
     fn new_for_leaf(n_vars: usize, n_models: usize) -> Self {
         Self {
             n_models: Integer::from(n_models),
             involved_vars: InvolvedVars::new(n_vars),
         }
     }
+
+    /// Returns the number of models.
+    #[must_use] pub fn n_models(&self) -> &Integer {
+        &self.n_models
+    }
 }
 
-impl BottomUpVisitor<VisitorData> for Visitor {
+impl BottomUpVisitor<ModelCountingVisitorData> for ModelCountingVisitor {
     fn merge_for_and(
         &self,
         _ddnnf: &DecisionDNNF,
         path: &[usize],
-        children: Vec<(&[Literal], VisitorData)>,
-    ) -> VisitorData {
+        children: Vec<(&[Literal], ModelCountingVisitorData)>,
+    ) -> ModelCountingVisitorData {
         adapt_for_root(
             merge_children(children, &|v0, v1| {
                 v0.n_models.clone() * v1.n_models.clone()
@@ -40,8 +47,8 @@ impl BottomUpVisitor<VisitorData> for Visitor {
         &self,
         _ddnnf: &DecisionDNNF,
         path: &[usize],
-        children: Vec<(&[Literal], VisitorData)>,
-    ) -> VisitorData {
+        children: Vec<(&[Literal], ModelCountingVisitorData)>,
+    ) -> ModelCountingVisitorData {
         adapt_for_root(
             merge_children(children, &|v0, v1| {
                 let mut intersection = v0.involved_vars.clone();
@@ -55,19 +62,19 @@ impl BottomUpVisitor<VisitorData> for Visitor {
         )
     }
 
-    fn new_for_true(&self, ddnnf: &DecisionDNNF, path: &[usize]) -> VisitorData {
-        adapt_for_root(VisitorData::new_for_leaf(ddnnf.n_vars(), 1), path)
+    fn new_for_true(&self, ddnnf: &DecisionDNNF, path: &[usize]) -> ModelCountingVisitorData {
+        adapt_for_root(ModelCountingVisitorData::new_for_leaf(ddnnf.n_vars(), 1), path)
     }
 
-    fn new_for_false(&self, ddnnf: &DecisionDNNF, path: &[usize]) -> VisitorData {
-        adapt_for_root(VisitorData::new_for_leaf(ddnnf.n_vars(), 0), path)
+    fn new_for_false(&self, ddnnf: &DecisionDNNF, path: &[usize]) -> ModelCountingVisitorData {
+        adapt_for_root(ModelCountingVisitorData::new_for_leaf(ddnnf.n_vars(), 0), path)
     }
 }
 
 fn merge_children(
-    children: Vec<(&[Literal], VisitorData)>,
-    n_models_fn: &dyn Fn(&VisitorData, &VisitorData) -> Integer,
-) -> VisitorData {
+    children: Vec<(&[Literal], ModelCountingVisitorData)>,
+    n_models_fn: &dyn Fn(&ModelCountingVisitorData, &ModelCountingVisitorData) -> Integer,
+) -> ModelCountingVisitorData {
     let new_children = children
         .into_iter()
         .map(|(propagated, mut child)| {
@@ -85,7 +92,7 @@ fn merge_children(
         .expect("cannot merge an empty set of children")
 }
 
-fn adapt_for_root(mut data: VisitorData, path: &[usize]) -> VisitorData {
+fn adapt_for_root(mut data: ModelCountingVisitorData, path: &[usize]) -> ModelCountingVisitorData {
     if path.len() == 1 {
         data.n_models *= 1 << data.involved_vars.count_zeros();
     }
@@ -102,7 +109,7 @@ mod tests {
         let str_ddnnf =
             "a 1 0\no 2 0\no 3 0\nt 4 0\n1 2 0\n1 3 0\n2 4 -1 0\n2 4 1 0\n3 4 -2 0\n3 4 2 0\n";
         let ddnnf = D4Reader::read(str_ddnnf.as_bytes()).unwrap();
-        let traversal = BottomUpTraversal::new(Box::<Visitor>::default());
+        let traversal = BottomUpTraversal::new(Box::<ModelCountingVisitor>::default());
         let result = traversal.traverse(&ddnnf);
         assert_eq!(4, result.n_models);
     }

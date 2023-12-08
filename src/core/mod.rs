@@ -1,6 +1,6 @@
 mod bottom_up_traversal;
-pub(crate) use bottom_up_traversal::BottomUpTraversal;
-pub(crate) use bottom_up_traversal::BottomUpVisitor;
+pub use bottom_up_traversal::BottomUpTraversal;
+pub use bottom_up_traversal::BottomUpVisitor;
 
 mod decision_dnnf;
 pub use decision_dnnf::DecisionDNNF;

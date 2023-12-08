@@ -1,5 +1,5 @@
 [package]
-name = "decdnnf-rs"
+name = "decdnnf_rs"
 version = "0.1.0"
 edition = "2021"
 
@@ -11,7 +11,16 @@ missing_docs = "warn"
 [lints.clippy]
 pedantic = "warn"
 
+[lib]
+name = "decdnnf_rs"
+path = "src/lib.rs"
+
+[[bin]]
+name = "decdnnf_rs"
+path = "src/main.rs"
+
 [dependencies]
 anyhow = "1.0"
 bitvec = "1.0"
+crusti_app_helper = {path = "local_crates/crusti_app_helper-v0.1"}
 rug = "1.22"

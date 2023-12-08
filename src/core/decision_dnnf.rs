@@ -142,6 +142,20 @@ impl DecisionDNNF {
         }
     }
 
+    /// Updates the number of variables.
+    /// The new number must be higher than the current number of variables.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if the new number of variables is lower than the current.
+    pub fn update_n_vars(&mut self, n_vars: usize) {
+        assert!(
+            n_vars >= self.n_vars,
+            "cannot reduce the number of variables"
+        );
+        self.n_vars = n_vars;
+    }
+
     /// Returns the number of variables involved in this Decision-DNNF.
     #[must_use]
     pub fn n_vars(&self) -> usize {

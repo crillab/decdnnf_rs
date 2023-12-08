@@ -1,8 +1,11 @@
 //! A library used to handle Decision-DNNF formulas.
 
 mod algorithms;
+pub use algorithms::ModelCountingVisitor;
+pub use algorithms::ModelCountingVisitorData;
 
 mod core;
+pub use core::BottomUpTraversal;
 pub use core::DecisionDNNF;
 pub use core::Edge;
 pub use core::Literal;

@@ -1,0 +1,15 @@
+[package]
+name = "crusti_app_helper"
+version = "0.1.0"
+authors = ["Lonca Emmanuel <emmanuel.lonca@univ-artois.fr>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.33"
+chrono = "0.4.19"
+clap = "2.33.3"
+fern = { version = "0.6.0", features = ["colored"] }
+log = "0.4.11"
+sysinfo = "0.23.9"

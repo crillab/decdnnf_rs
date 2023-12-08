@@ -1,7 +1,7 @@
 use crate::{DecisionDNNF, Literal, Node};
 
 /// A structure used to apply algorithms on a Decision-DNNF in a bottom-up fashion.
-/// 
+///
 /// Algorithms that want to use this object must use a structure implementing the [`BottomUpVisitor`] trait.
 pub struct BottomUpTraversal<T> {
     visitor: Box<dyn BottomUpVisitor<T>>,
@@ -29,12 +29,14 @@ pub trait BottomUpVisitor<T> {
 
 impl<T> BottomUpTraversal<T> {
     /// Builds a new traversal structure given an algorithms working in a bottom-up fashion.
-    #[must_use] pub fn new(visitor: Box<dyn BottomUpVisitor<T>>) -> Self {
+    #[must_use]
+    pub fn new(visitor: Box<dyn BottomUpVisitor<T>>) -> Self {
         Self { visitor }
     }
 
     /// Make the traversal, applying the algorithm given at this object creation time.
-    #[must_use] pub fn traverse(&self, ddnnf: &DecisionDNNF) -> T {
+    #[must_use]
+    pub fn traverse(&self, ddnnf: &DecisionDNNF) -> T {
         let mut path = Vec::with_capacity(ddnnf.n_vars());
         self.traverse_for(ddnnf, 0, &mut path)
     }
@@ -67,9 +69,24 @@ impl<T> BottomUpTraversal<T> {
     }
 }
 
+/// A Bottom-up visitor made to decorate a pair of underlying visitors.
 pub struct BiBottomUpVisitor<T, U> {
     visitor_t: Box<dyn BottomUpVisitor<T>>,
     visitor_u: Box<dyn BottomUpVisitor<U>>,
+}
+
+impl<T, U> BiBottomUpVisitor<T, U> {
+    /// Builds a new visitor that decorates the given pair of visitors.
+    #[must_use]
+    pub fn new(
+        visitor_t: Box<dyn BottomUpVisitor<T>>,
+        visitor_u: Box<dyn BottomUpVisitor<U>>,
+    ) -> Self {
+        Self {
+            visitor_t,
+            visitor_u,
+        }
+    }
 }
 
 impl<T, U> BottomUpVisitor<(T, U)> for BiBottomUpVisitor<T, U> {

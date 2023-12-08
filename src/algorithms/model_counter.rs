@@ -23,7 +23,8 @@ impl ModelCountingVisitorData {
     }
 
     /// Returns the number of models.
-    #[must_use] pub fn n_models(&self) -> &Integer {
+    #[must_use]
+    pub fn n_models(&self) -> &Integer {
         &self.n_models
     }
 }
@@ -63,11 +64,17 @@ impl BottomUpVisitor<ModelCountingVisitorData> for ModelCountingVisitor {
     }
 
     fn new_for_true(&self, ddnnf: &DecisionDNNF, path: &[usize]) -> ModelCountingVisitorData {
-        adapt_for_root(ModelCountingVisitorData::new_for_leaf(ddnnf.n_vars(), 1), path)
+        adapt_for_root(
+            ModelCountingVisitorData::new_for_leaf(ddnnf.n_vars(), 1),
+            path,
+        )
     }
 
     fn new_for_false(&self, ddnnf: &DecisionDNNF, path: &[usize]) -> ModelCountingVisitorData {
-        adapt_for_root(ModelCountingVisitorData::new_for_leaf(ddnnf.n_vars(), 0), path)
+        adapt_for_root(
+            ModelCountingVisitorData::new_for_leaf(ddnnf.n_vars(), 0),
+            path,
+        )
     }
 }
 

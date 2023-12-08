@@ -1,4 +1,5 @@
 mod bottom_up_traversal;
+pub use bottom_up_traversal::BiBottomUpVisitor;
 pub use bottom_up_traversal::BottomUpTraversal;
 pub use bottom_up_traversal::BottomUpVisitor;
 

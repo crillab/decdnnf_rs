@@ -1,6 +1,8 @@
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use crusti_app_helper::{info, App, AppSettings, Arg, ArgMatches, SubCommand};
-use decdnnf_rs::{BottomUpTraversal, D4Reader, ModelCountingVisitor};
+use decdnnf_rs::{
+    BiBottomUpVisitor, BottomUpTraversal, CheckingVisitor, D4Reader, ModelCountingVisitor,
+};
 use std::{
     fs::{self, File},
     io::BufReader,
@@ -52,9 +54,16 @@ impl<'a> crusti_app_helper::Command<'a> for Command {
                 .context("while parsing the number of variables provided on the command line")?;
             ddnnf.update_n_vars(n);
         }
-        let traversal_engine = BottomUpTraversal::new(Box::<ModelCountingVisitor>::default());
-        let traversal_result = traversal_engine.traverse(&ddnnf);
-        println!("{}", traversal_result.n_models());
+        let traversal_visitor = BiBottomUpVisitor::new(
+            Box::<CheckingVisitor>::default(),
+            Box::<ModelCountingVisitor>::default(),
+        );
+        let traversal_engine = BottomUpTraversal::new(Box::new(traversal_visitor));
+        let (checking_data, model_counting_data) = traversal_engine.traverse(&ddnnf);
+        if let Some(e) = checking_data.get_error() {
+            return Err(anyhow!("{e}"));
+        }
+        println!("{}", model_counting_data.n_models());
         Ok(())
     }
 }

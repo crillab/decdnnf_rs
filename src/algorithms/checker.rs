@@ -3,9 +3,11 @@ use crate::{
     DecisionDNNF, Literal,
 };
 
+/// A bottom-up visitor used for an algorithm that checks if a Decision-DNNF is correct (i.e. it is really a Decision-DNNF).
 #[derive(Clone, Default)]
 pub struct CheckingVisitor;
 
+/// The data used by the [`CheckingVisitor`] structure.
 #[derive(Clone)]
 pub struct CheckingVisitorData {
     error: Option<String>,
@@ -32,6 +34,12 @@ impl CheckingVisitorData {
             error: None,
             involved_vars: InvolvedVars::new(n_vars),
         }
+    }
+
+    /// Return an option containing an error, if one was discovered during the traversal.
+    #[must_use]
+    pub fn get_error(&self) -> Option<&str> {
+        self.error.as_deref()
     }
 }
 

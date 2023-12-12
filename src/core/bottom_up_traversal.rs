@@ -1,4 +1,5 @@
-use crate::{DecisionDNNF, Literal, Node};
+use super::decision_dnnf::{EdgeIndex, NodeIndex};
+use crate::{DecisionDNNF, Edge, Literal, Node};
 
 /// A structure used to apply algorithms on a Decision-DNNF in a bottom-up fashion.
 ///
@@ -11,20 +12,20 @@ pub trait BottomUpVisitor<T> {
     fn merge_for_and(
         &self,
         ddnnf: &DecisionDNNF,
-        path: &[usize],
+        path: &[NodeIndex],
         children: Vec<(&[Literal], T)>,
     ) -> T;
 
     fn merge_for_or(
         &self,
         ddnnf: &DecisionDNNF,
-        path: &[usize],
+        path: &[NodeIndex],
         children: Vec<(&[Literal], T)>,
     ) -> T;
 
-    fn new_for_true(&self, ddnnf: &DecisionDNNF, path: &[usize]) -> T;
+    fn new_for_true(&self, ddnnf: &DecisionDNNF, path: &[NodeIndex]) -> T;
 
-    fn new_for_false(&self, ddnnf: &DecisionDNNF, path: &[usize]) -> T;
+    fn new_for_false(&self, ddnnf: &DecisionDNNF, path: &[NodeIndex]) -> T;
 }
 
 impl<T> BottomUpTraversal<T> {
@@ -38,15 +39,20 @@ impl<T> BottomUpTraversal<T> {
     #[must_use]
     pub fn traverse(&self, ddnnf: &DecisionDNNF) -> T {
         let mut path = Vec::with_capacity(ddnnf.n_vars());
-        self.traverse_for(ddnnf, 0, &mut path)
+        self.traverse_for(ddnnf, 0.into(), &mut path)
     }
 
-    fn traverse_for(&self, ddnnf: &DecisionDNNF, node_index: usize, path: &mut Vec<usize>) -> T {
+    fn traverse_for(
+        &self,
+        ddnnf: &DecisionDNNF,
+        node_index: NodeIndex,
+        path: &mut Vec<NodeIndex>,
+    ) -> T {
         path.push(node_index);
-        let mut compute_new_children = |v: &[usize]| {
+        let mut compute_new_children = |v: &[EdgeIndex]| {
             v.iter()
                 .map(|e| {
-                    let edge = &ddnnf.edges()[*e];
+                    let edge: &Edge = &ddnnf.edges()[*e];
                     let new_child = self.traverse_for(ddnnf, edge.target(), path);
                     (edge.propagated(), new_child)
                 })
@@ -93,7 +99,7 @@ impl<T, U> BottomUpVisitor<(T, U)> for BiBottomUpVisitor<T, U> {
     fn merge_for_and(
         &self,
         ddnnf: &DecisionDNNF,
-        path: &[usize],
+        path: &[NodeIndex],
         children: Vec<(&[Literal], (T, U))>,
     ) -> (T, U) {
         let (children_t, children_u) = children
@@ -109,7 +115,7 @@ impl<T, U> BottomUpVisitor<(T, U)> for BiBottomUpVisitor<T, U> {
     fn merge_for_or(
         &self,
         ddnnf: &DecisionDNNF,
-        path: &[usize],
+        path: &[NodeIndex],
         children: Vec<(&[Literal], (T, U))>,
     ) -> (T, U) {
         let (children_t, children_u) = children
@@ -122,14 +128,14 @@ impl<T, U> BottomUpVisitor<(T, U)> for BiBottomUpVisitor<T, U> {
         )
     }
 
-    fn new_for_true(&self, ddnnf: &DecisionDNNF, path: &[usize]) -> (T, U) {
+    fn new_for_true(&self, ddnnf: &DecisionDNNF, path: &[NodeIndex]) -> (T, U) {
         (
             self.visitor_t.new_for_true(ddnnf, path),
             self.visitor_u.new_for_true(ddnnf, path),
         )
     }
 
-    fn new_for_false(&self, ddnnf: &DecisionDNNF, path: &[usize]) -> (T, U) {
+    fn new_for_false(&self, ddnnf: &DecisionDNNF, path: &[NodeIndex]) -> (T, U) {
         (
             self.visitor_t.new_for_false(ddnnf, path),
             self.visitor_u.new_for_false(ddnnf, path),

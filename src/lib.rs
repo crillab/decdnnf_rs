@@ -11,8 +11,12 @@ pub use core::BiBottomUpVisitor;
 pub use core::BottomUpTraversal;
 pub use core::DecisionDNNF;
 pub use core::Edge;
+pub use core::EdgeIndex;
+pub use core::EdgeVec;
 pub use core::Literal;
 pub use core::Node;
+pub use core::NodeIndex;
+pub use core::NodeVec;
 
 mod io;
 pub use io::C2dWriter;

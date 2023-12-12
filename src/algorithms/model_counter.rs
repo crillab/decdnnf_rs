@@ -1,6 +1,6 @@
 use crate::{
     core::{BottomUpVisitor, InvolvedVars},
-    DecisionDNNF, Literal,
+    DecisionDNNF, Literal, NodeIndex,
 };
 use rug::Integer;
 
@@ -33,7 +33,7 @@ impl BottomUpVisitor<ModelCountingVisitorData> for ModelCountingVisitor {
     fn merge_for_and(
         &self,
         _ddnnf: &DecisionDNNF,
-        path: &[usize],
+        path: &[NodeIndex],
         children: Vec<(&[Literal], ModelCountingVisitorData)>,
     ) -> ModelCountingVisitorData {
         adapt_for_root(
@@ -47,7 +47,7 @@ impl BottomUpVisitor<ModelCountingVisitorData> for ModelCountingVisitor {
     fn merge_for_or(
         &self,
         _ddnnf: &DecisionDNNF,
-        path: &[usize],
+        path: &[NodeIndex],
         children: Vec<(&[Literal], ModelCountingVisitorData)>,
     ) -> ModelCountingVisitorData {
         adapt_for_root(
@@ -63,14 +63,14 @@ impl BottomUpVisitor<ModelCountingVisitorData> for ModelCountingVisitor {
         )
     }
 
-    fn new_for_true(&self, ddnnf: &DecisionDNNF, path: &[usize]) -> ModelCountingVisitorData {
+    fn new_for_true(&self, ddnnf: &DecisionDNNF, path: &[NodeIndex]) -> ModelCountingVisitorData {
         adapt_for_root(
             ModelCountingVisitorData::new_for_leaf(ddnnf.n_vars(), 1),
             path,
         )
     }
 
-    fn new_for_false(&self, ddnnf: &DecisionDNNF, path: &[usize]) -> ModelCountingVisitorData {
+    fn new_for_false(&self, ddnnf: &DecisionDNNF, path: &[NodeIndex]) -> ModelCountingVisitorData {
         adapt_for_root(
             ModelCountingVisitorData::new_for_leaf(ddnnf.n_vars(), 0),
             path,
@@ -99,7 +99,10 @@ fn merge_children(
         .expect("cannot merge an empty set of children")
 }
 
-fn adapt_for_root(mut data: ModelCountingVisitorData, path: &[usize]) -> ModelCountingVisitorData {
+fn adapt_for_root(
+    mut data: ModelCountingVisitorData,
+    path: &[NodeIndex],
+) -> ModelCountingVisitorData {
     if path.len() == 1 {
         data.n_models *= 1 << data.involved_vars.count_zeros();
     }

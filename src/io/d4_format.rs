@@ -1,4 +1,4 @@
-use crate::{DecisionDNNF, Edge, Literal, Node};
+use crate::{DecisionDNNF, Edge, Literal, Node, NodeIndex};
 use anyhow::{anyhow, Context, Result};
 use std::str::FromStr;
 use std::{
@@ -167,16 +167,16 @@ impl D4FormatReaderData {
                 .unwrap_or_default()
                 + 1,
         );
-        let edge = Edge::from_raw_data(target_index - 1, propagated);
+        let edge = Edge::from_raw_data((target_index - 1).into(), propagated);
         self.edges.push(edge);
-        self.nodes[source_index - 1].add_edge(self.edges.len() - 1)?;
+        self.nodes[source_index - 1].add_edge((self.edges.len() - 1).into())?;
         Ok(())
     }
 
     fn check_connectivity(&self) -> Result<()> {
         let mut seen_once = vec![false; self.nodes.len()];
         let mut seen_on_path = vec![false; self.nodes.len()];
-        self.check_connectivity_from(&mut seen_once, &mut seen_on_path, 0)?;
+        self.check_connectivity_from(&mut seen_once, &mut seen_on_path, 0.into())?;
         match seen_once.iter().position(|b| !b) {
             Some(i) => Err(anyhow!("no path to the node with index {}", i + 1)),
             None => Ok(()),
@@ -187,26 +187,30 @@ impl D4FormatReaderData {
         &self,
         seen_once: &mut [bool],
         seen_on_path: &mut [bool],
-        node_index: usize,
+        node_index: NodeIndex,
     ) -> Result<()> {
-        let add_to_seen_on_path = |i, sop: &mut [bool]| {
-            if sop[i] {
+        let add_to_seen_on_path = |i: NodeIndex, sop: &mut [bool]| {
+            if sop[usize::from(i)] {
                 return Err(anyhow!("cycle detected"));
             }
-            sop[i] = true;
+            sop[usize::from(i)] = true;
             Ok(())
         };
         add_to_seen_on_path(node_index, seen_on_path)?;
-        seen_once[node_index] = true;
-        match &self.nodes[node_index] {
+        seen_once[usize::from(node_index)] = true;
+        match &self.nodes[usize::from(node_index)] {
             Node::And(v) | Node::Or(v) => {
                 v.iter().try_for_each(|e| {
-                    self.check_connectivity_from(seen_once, seen_on_path, self.edges[*e].target())
+                    self.check_connectivity_from(
+                        seen_once,
+                        seen_on_path,
+                        self.edges[usize::from(*e)].target(),
+                    )
                 })?;
             }
             Node::True | Node::False => {}
         }
-        seen_on_path[node_index] = false;
+        seen_on_path[usize::from(node_index)] = false;
         Ok(())
     }
 }
@@ -331,7 +335,7 @@ mod tests {
             "a 1 0\no 2 0\no 3 0\nt 4 0\n1 2 0\n1 3 0\n2 4 -1 0\n2 4 1 0\n3 4 -2 0\n3 4 2 0\n";
         let ddnnf = Reader::read(&mut instance.as_bytes()).unwrap();
         assert_eq!(2, ddnnf.n_vars());
-        assert_eq!(4, ddnnf.nodes().len());
-        assert_eq!(6, ddnnf.edges().len());
+        assert_eq!(4, ddnnf.nodes().as_slice().len());
+        assert_eq!(6, ddnnf.edges().as_slice().len());
     }
 }

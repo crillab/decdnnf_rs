@@ -1,17 +1,16 @@
 use anyhow::{anyhow, Result};
 use std::{
     fmt::{Debug, Display},
+    ops::Index,
     str::FromStr,
 };
-
-pub type EdgeIndex = usize;
 
 /// A structure representing a literal.
 ///
 /// Internal, a literal has a variable index and a polarity.
 /// The variable indices begin at 0.
 ///
-/// Such literals can be built from DIMACS representations usinf the [`From`] trait for isize.
+/// Such literals can be built from DIMACS representations using the [`From`] trait for isize.
 /// When a literal is displayed, the DIMACS representation is used.
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub struct Literal(usize);
@@ -104,14 +103,14 @@ impl FromStr for Node {
 
 /// An edge targets a node and propagates literals, in the spirit of recent [d4](https://github.com/crillab/d4) versions.
 pub struct Edge {
-    target: EdgeIndex,
+    target: NodeIndex,
     propagated: Vec<Literal>,
 }
 
 impl Edge {
     /// Returns the target of the edge.
     #[must_use]
-    pub fn target(&self) -> EdgeIndex {
+    pub fn target(&self) -> NodeIndex {
         self.target
     }
 
@@ -121,7 +120,7 @@ impl Edge {
         &self.propagated
     }
 
-    pub(crate) fn from_raw_data(target: EdgeIndex, propagated: Vec<Literal>) -> Self {
+    pub(crate) fn from_raw_data(target: NodeIndex, propagated: Vec<Literal>) -> Self {
         Self { target, propagated }
     }
 }
@@ -129,16 +128,16 @@ impl Edge {
 /// A Decision-DNNF formula.
 pub struct DecisionDNNF {
     n_vars: usize,
-    nodes: Vec<Node>,
-    edges: Vec<Edge>,
+    nodes: NodeVec,
+    edges: EdgeVec,
 }
 
 impl DecisionDNNF {
     pub(crate) fn from_raw_data(n_vars: usize, nodes: Vec<Node>, edges: Vec<Edge>) -> Self {
         Self {
             n_vars,
-            nodes,
-            edges,
+            nodes: NodeVec(nodes),
+            edges: EdgeVec(edges),
         }
     }
 
@@ -162,11 +161,60 @@ impl DecisionDNNF {
         self.n_vars
     }
 
-    pub(crate) fn nodes(&self) -> &[Node] {
+    pub(crate) fn nodes(&self) -> &NodeVec {
         &self.nodes
     }
 
-    pub(crate) fn edges(&self) -> &[Edge] {
+    pub(crate) fn edges(&self) -> &EdgeVec {
         &self.edges
     }
 }
+
+macro_rules! index_type {
+    ($type_name:ident, $index_name:ident, $vec_index_name:ident) => {
+        #[doc = concat!("An index type dedicated to [`", stringify!($type_name), "`] objects.")]
+        #[derive(Copy, Clone)]
+        pub struct $index_name(usize);
+
+        impl From<usize> for $index_name {
+            fn from(value: usize) -> Self {
+                $index_name(value)
+            }
+        }
+
+        impl From<$index_name> for usize {
+            fn from(value: $index_name) -> Self {
+                value.0
+            }
+        }
+
+        #[doc = concat!("A vector of [`", stringify!($type_name), "`] objects.")]
+        pub struct $vec_index_name(Vec<$type_name>);
+
+        impl $vec_index_name {
+            #[doc = concat!("Returns a ", stringify!($vec_index_name), " as a slice of [`", stringify!($type_name), "`].")]
+            #[must_use] pub fn as_slice(&self) -> &[$type_name] {
+                &self.0
+            }
+        }
+
+        impl Index<usize> for $vec_index_name {
+            type Output = $type_name;
+
+            fn index(&self, index: usize) -> &Self::Output {
+                &self.0[index]
+            }
+        }
+
+        impl Index<$index_name> for $vec_index_name {
+            type Output = $type_name;
+
+            fn index(&self, index: $index_name) -> &Self::Output {
+                &self.0[usize::from(index)]
+            }
+        }
+    };
+}
+
+index_type!(Edge, EdgeIndex, EdgeVec);
+index_type!(Node, NodeIndex, NodeVec);

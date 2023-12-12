@@ -1,6 +1,6 @@
 use crate::{
     core::{BottomUpVisitor, InvolvedVars},
-    DecisionDNNF, Literal,
+    DecisionDNNF, Literal, NodeIndex,
 };
 
 /// A bottom-up visitor used for an algorithm that checks if a Decision-DNNF is correct (i.e. it is really a Decision-DNNF).
@@ -47,7 +47,7 @@ impl BottomUpVisitor<CheckingVisitorData> for CheckingVisitor {
     fn merge_for_and(
         &self,
         _ddnnf: &DecisionDNNF,
-        path: &[usize],
+        path: &[NodeIndex],
         children: Vec<(&[Literal], CheckingVisitorData)>,
     ) -> CheckingVisitorData {
         if let Some(error) = get_error(&children) {
@@ -68,7 +68,7 @@ impl BottomUpVisitor<CheckingVisitorData> for CheckingVisitor {
                 if intersection.any() {
                     return CheckingVisitorData::new_error(format!(
                         "AND children share variables (AND node index is {})",
-                        path.last().unwrap()
+                        usize::from(*path.last().unwrap())
                     ));
                 }
             }
@@ -79,7 +79,7 @@ impl BottomUpVisitor<CheckingVisitorData> for CheckingVisitor {
     fn merge_for_or(
         &self,
         ddnnf: &DecisionDNNF,
-        path: &[usize],
+        path: &[NodeIndex],
         children: Vec<(&[Literal], CheckingVisitorData)>,
     ) -> CheckingVisitorData {
         if let Some(error) = get_error(&children) {
@@ -88,8 +88,8 @@ impl BottomUpVisitor<CheckingVisitorData> for CheckingVisitor {
         for i in 0..children.len() - 1 {
             for j in i + 1..children.len() {
                 if !are_contradictory(children[i].0, children[j].0) {
-                    return CheckingVisitorData::new_error(format!("OR children at indices {i} and {j} may not be contradictory (OR node index is {})", path.last()
-                .unwrap()));
+                    return CheckingVisitorData::new_error(format!("OR children at indices {i} and {j} may not be contradictory (OR node index is {})", usize::from(*path.last()
+                .unwrap())));
                 }
             }
         }
@@ -104,11 +104,11 @@ impl BottomUpVisitor<CheckingVisitorData> for CheckingVisitor {
         CheckingVisitorData::new_involved_vars(involved_vars)
     }
 
-    fn new_for_true(&self, ddnnf: &DecisionDNNF, _path: &[usize]) -> CheckingVisitorData {
+    fn new_for_true(&self, ddnnf: &DecisionDNNF, _path: &[NodeIndex]) -> CheckingVisitorData {
         CheckingVisitorData::new_for_leaf(ddnnf.n_vars())
     }
 
-    fn new_for_false(&self, ddnnf: &DecisionDNNF, _path: &[usize]) -> CheckingVisitorData {
+    fn new_for_false(&self, ddnnf: &DecisionDNNF, _path: &[NodeIndex]) -> CheckingVisitorData {
         CheckingVisitorData::new_for_leaf(ddnnf.n_vars())
     }
 }

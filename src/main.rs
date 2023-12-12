@@ -2,7 +2,7 @@
 
 mod app;
 
-use app::ModelCountingCommand;
+use app::{ModelCountingCommand, TranslationCommand};
 use crusti_app_helper::{AppHelper, Command};
 
 pub(crate) fn create_app_helper() -> AppHelper<'static> {
@@ -15,7 +15,10 @@ pub(crate) fn create_app_helper() -> AppHelper<'static> {
         authors,
         "decdnnf-rs, a library for Decision-DNNFs.",
     );
-    let commands: Vec<Box<dyn Command>> = vec![Box::<ModelCountingCommand>::default()];
+    let commands: Vec<Box<dyn Command>> = vec![
+        Box::<ModelCountingCommand>::default(),
+        Box::<TranslationCommand>::default(),
+    ];
     for c in commands {
         app.add_command(c);
     }

@@ -14,18 +14,34 @@ To build from source, run `cargo build --release` to compile the binary. It will
 The decdnnf-rs tool expects a subcommand.
 To get the list, just invoke the command with the help flag.
 
-```
+```bash
 decdnnf_rs -h
 ```
 
 In the same way, you can obtain the list of expected and optional arguments by adding the help flag after the subcommand.
 
-```
+```bash
 decdnnf_rs model-counting -h
 ```
 
 The `model-counting` and the `translation` commands share most of their options, like input file and logging level.
 Another one of interest is `--n-vars`. Since the output format of d4 does not provide the number of variables of the problems, it cannot be deduced if it is more important than the highest variable index in use. Setting `--n-vars` allows to override the number of variables returned by the parser, which is set to the highest variable index.
+
+## Translate a d4 Decision-DNNF into a c2d Decision-DNNF
+
+Use the `translation` command:
+
+```bash
+decdnnf_rs translation -i instance.nnf
+```
+
+## Count the models of a Decision-DNNF
+
+Use the `model-counting` command:
+
+```bash
+decdnnf_rs model-counting -i instance.nnf
+```
 
 ## License
 

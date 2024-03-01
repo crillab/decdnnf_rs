@@ -28,7 +28,7 @@ impl Reader {
     {
         let mut reader = BufReader::new(reader);
         let mut buffer = String::new();
-        let context = "while parsing a belief DIMACS instance";
+        let context = "while parsing a d4 formatted Decision-DNNF";
         let line_index = Rc::new(RefCell::new(0));
         let line_index_context = || format!("while parsing line at index {}", line_index.borrow());
         let mut reader_data = D4FormatReaderData::default();

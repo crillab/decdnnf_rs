@@ -8,7 +8,13 @@ pub struct BottomUpTraversal<T> {
     visitor: Box<dyn BottomUpVisitor<T>>,
 }
 
+/// A trait to be implemented by objects traversing Decision-DNNF formulas in a bottom-up fashion using a [`BottomUpTraversal`].
+///
+/// This trait contains functions that returns some data when a new node must be created.
+/// Since the traversal is bottom-up, each of these functions is dedicated to a kind aof node and take as input children nodes that have already been computed by the object itself.
+/// These functions returns a data type which is a parameter of the trait.
 pub trait BottomUpVisitor<T> {
+    /// Creates new data from an and node which children data are given.
     fn merge_for_and(
         &self,
         ddnnf: &DecisionDNNF,
@@ -16,6 +22,7 @@ pub trait BottomUpVisitor<T> {
         children: Vec<(&[Literal], T)>,
     ) -> T;
 
+    /// Creates new data from an or node which children data are given.
     fn merge_for_or(
         &self,
         ddnnf: &DecisionDNNF,
@@ -23,8 +30,10 @@ pub trait BottomUpVisitor<T> {
         children: Vec<(&[Literal], T)>,
     ) -> T;
 
+    /// Creates new data from a true node.
     fn new_for_true(&self, ddnnf: &DecisionDNNF, path: &[NodeIndex]) -> T;
 
+    /// Creates new data from a false node.
     fn new_for_false(&self, ddnnf: &DecisionDNNF, path: &[NodeIndex]) -> T;
 }
 

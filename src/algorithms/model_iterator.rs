@@ -98,8 +98,7 @@ impl Iterator for ModelSequenceIterator<'_> {
 struct ModelProductIterator<'a> {
     children: &'a [(Vec<Literal>, ModelIteratorVisitorData)],
     iterators: Vec<Box<dyn Iterator<Item = Vec<Literal>> + 'a>>,
-    next_values: Option<Vec<Vec<Literal>>>,
-    common: Vec<Literal>,
+    next_value: ProductNextValue,
 }
 
 impl<'a> ModelProductIterator<'a> {
@@ -107,16 +106,20 @@ impl<'a> ModelProductIterator<'a> {
         debug_assert!(!children.is_empty());
         let mut iterators: Vec<Box<dyn Iterator<Item = Vec<Literal>> + 'a>> =
             children.iter().map(|c| c.1.iterator()).collect();
-        let next_values = iterators
-            .iter_mut()
-            .map(Iterator::next)
-            .collect::<Option<Vec<_>>>();
-        let common = children.iter().flat_map(|c| c.0.iter().copied()).collect();
+        let mut next_value = ProductNextValue::new();
+        next_value.push(&mut children.iter().flat_map(|c| c.0.iter().copied()).collect());
+        for it in &mut iterators {
+            if let Some(mut v) = it.next() {
+                next_value.push(&mut v);
+            } else {
+                next_value.set_none();
+                break;
+            }
+        }
         Self {
             children,
             iterators,
-            next_values,
-            common,
+            next_value,
         }
     }
 }
@@ -125,38 +128,71 @@ impl Iterator for ModelProductIterator<'_> {
     type Item = Vec<Literal>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match &mut self.next_values {
-            Some(nv) => {
-                let next_value = nv
-                    .iter()
-                    .flat_map(|v| v.iter().copied())
-                    .chain(self.common.iter().copied())
-                    .collect::<Vec<_>>();
-                let mut last_none = None;
-                for i in (0..nv.len()).rev() {
-                    let next = self.iterators[i].next();
-                    match next {
-                        Some(v) => {
-                            nv[i] = v;
-                            break;
-                        }
-                        None => last_none = Some(i),
-                    }
-                }
-                match last_none {
-                    Some(0) => self.next_values = None,
-                    Some(n) => {
-                        nv.iter_mut().enumerate().skip(n).for_each(|(i, v)| {
-                            self.iterators[i] = self.children[i].1.iterator();
-                            *v = self.iterators[i].next().unwrap();
-                        });
-                    }
-                    None => {}
-                }
-                Some(next_value)
-            }
-            None => None,
+        if self.next_value.is_none() {
+            return None;
         }
+        let result = Some(self.next_value.to_vec());
+        let mut last_none = None;
+        for i in (0..self.iterators.len()).rev() {
+            self.next_value.pop();
+            let next = self.iterators[i].next();
+            match next {
+                Some(mut v) => {
+                    self.next_value.push(&mut v);
+                    break;
+                }
+                None => last_none = Some(i),
+            }
+        }
+        match last_none {
+            Some(0) => self.next_value.set_none(),
+            Some(n) => {
+                for i in n..self.iterators.len() {
+                    self.iterators[i] = self.children[i].1.iterator();
+                    self.next_value.push(&mut self.iterators[i].next().unwrap());
+                }
+            }
+            None => {}
+        }
+        result
+    }
+}
+
+#[derive(Debug)]
+struct ProductNextValue {
+    is_some: bool,
+    literals: Vec<Literal>,
+    lengths: Vec<usize>,
+}
+
+impl ProductNextValue {
+    fn new() -> Self {
+        Self {
+            is_some: true,
+            literals: Vec::new(),
+            lengths: Vec::new(),
+        }
+    }
+
+    fn set_none(&mut self) {
+        self.is_some = false;
+    }
+
+    fn is_none(&self) -> bool {
+        !self.is_some
+    }
+
+    fn push(&mut self, literals: &mut Vec<Literal>) {
+        self.lengths.push(self.literals.len());
+        self.literals.append(literals);
+    }
+
+    fn pop(&mut self) {
+        self.literals.truncate(self.lengths.pop().unwrap());
+    }
+
+    fn to_vec(&self) -> Vec<Literal> {
+        self.literals.clone()
     }
 }
 

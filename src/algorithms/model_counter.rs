@@ -114,13 +114,61 @@ mod tests {
     use super::*;
     use crate::{core::BottomUpTraversal, D4Reader};
 
-    #[test]
-    fn test_ok() {
-        let str_ddnnf =
-            "a 1 0\no 2 0\no 3 0\nt 4 0\n1 2 0\n1 3 0\n2 4 -1 0\n2 4 1 0\n3 4 -2 0\n3 4 2 0\n";
-        let ddnnf = D4Reader::read(str_ddnnf.as_bytes()).unwrap();
+    fn model_count(instance: &str, n_vars: Option<usize>) -> usize {
+        let mut ddnnf = D4Reader::read(instance.as_bytes()).unwrap();
+        if let Some(n) = n_vars {
+            ddnnf.update_n_vars(n);
+        }
         let traversal = BottomUpTraversal::new(Box::<ModelCountingVisitor>::default());
         let result = traversal.traverse(&ddnnf);
-        assert_eq!(4, result.n_models);
+        result.n_models.to_usize_wrapping()
+    }
+
+    #[test]
+    fn test_ok() {
+        assert_eq!(
+            4,
+            model_count(
+                "a 1 0\no 2 0\no 3 0\nt 4 0\n1 2 0\n1 3 0\n2 4 -1 0\n2 4 1 0\n3 4 -2 0\n3 4 2 0\n",
+                None
+            )
+        );
+    }
+
+    #[test]
+    fn test_true_no_vars() {
+        assert_eq!(1, model_count("t 1 0\n", None));
+    }
+
+    #[test]
+    fn test_true_one_var() {
+        assert_eq!(2, model_count("t 1 0\n", Some(1)));
+    }
+
+    #[test]
+    fn test_true_two_vars() {
+        assert_eq!(4, model_count("t 1 0\n", Some(2)));
+    }
+
+    #[test]
+    fn test_false() {
+        assert_eq!(0, model_count("f 1 0\n", None));
+    }
+
+    #[test]
+    fn test_clause() {
+        assert_eq!(
+            3,
+            model_count(
+                r"
+                o 1 0
+                o 2 0
+                t 3 0
+                2 3 -1 -2 0
+                2 3 1 0
+                1 2 0",
+                None
+            )
+        );
     }
 }

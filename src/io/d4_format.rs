@@ -164,8 +164,8 @@ impl D4FormatReaderData {
                 .iter()
                 .map(Literal::var_index)
                 .max()
-                .unwrap_or_default()
-                + 1,
+                .map(|i| i + 1)
+                .unwrap_or_default(),
         );
         let edge = Edge::from_raw_data((target_index - 1).into(), propagated);
         self.edges.push(edge);
@@ -217,8 +217,6 @@ impl D4FormatReaderData {
 
 #[cfg(test)]
 mod tests {
-    use core::panic;
-
     use super::*;
 
     fn assert_error(instance: &str, expected_error: &str) {
@@ -337,5 +335,29 @@ mod tests {
         assert_eq!(2, ddnnf.n_vars());
         assert_eq!(4, ddnnf.nodes().as_slice().len());
         assert_eq!(6, ddnnf.edges().as_slice().len());
+    }
+
+    #[test]
+    fn test_clause() {
+        let instance = r"
+        o 1 0
+        o 2 0
+        t 3 0
+        2 3 -1 -2 0
+        2 3 1 0
+        1 2 0";
+        let ddnnf = Reader::read(&mut instance.as_bytes()).unwrap();
+        assert_eq!(2, ddnnf.n_vars());
+        assert_eq!(3, ddnnf.nodes().as_slice().len());
+        assert_eq!(3, ddnnf.edges().as_slice().len());
+    }
+
+    #[test]
+    fn test_empty_instance() {
+        let instance = "t 1 0";
+        let ddnnf = Reader::read(&mut instance.as_bytes()).unwrap();
+        assert_eq!(0, ddnnf.n_vars());
+        assert_eq!(1, ddnnf.nodes().as_slice().len());
+        assert_eq!(0, ddnnf.edges().as_slice().len());
     }
 }

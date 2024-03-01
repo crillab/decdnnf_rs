@@ -10,6 +10,7 @@ missing_docs = "warn"
 
 [lints.clippy]
 pedantic = "warn"
+module_name_repetitions = "allow"
 
 [lib]
 name = "decdnnf_rs"

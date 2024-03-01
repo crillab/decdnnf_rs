@@ -48,6 +48,17 @@ impl From<isize> for Literal {
     }
 }
 
+impl From<Literal> for isize {
+    fn from(l: Literal) -> Self {
+        let abs = isize::try_from(l.var_index() + 1).unwrap();
+        if l.polarity() {
+            abs
+        } else {
+            -abs
+        }
+    }
+}
+
 impl Display for Literal {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if !self.polarity() {

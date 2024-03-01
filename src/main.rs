@@ -2,7 +2,7 @@
 
 mod app;
 
-use app::{ModelCountingCommand, TranslationCommand};
+use app::{ModelCountingCommand, ModelEnumerationCommand, TranslationCommand};
 use crusti_app_helper::{AppHelper, Command};
 
 pub(crate) fn create_app_helper() -> AppHelper<'static> {
@@ -17,6 +17,7 @@ pub(crate) fn create_app_helper() -> AppHelper<'static> {
     );
     let commands: Vec<Box<dyn Command>> = vec![
         Box::<ModelCountingCommand>::default(),
+        Box::<ModelEnumerationCommand>::default(),
         Box::<TranslationCommand>::default(),
     ];
     for c in commands {

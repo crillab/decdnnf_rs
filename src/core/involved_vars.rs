@@ -1,7 +1,9 @@
 use crate::Literal;
 use bitvec::{bitvec, vec::BitVec};
 
-#[derive(Clone)]
+/// A type dedicated to the registration of the variables involved at some points.
+/// Relies on bitsets.
+#[derive(Clone, Debug)]
 pub(crate) struct InvolvedVars(BitVec);
 
 impl InvolvedVars {
@@ -11,6 +13,10 @@ impl InvolvedVars {
 
     pub fn new(n_vars: usize) -> Self {
         Self(bitvec![0; n_vars])
+    }
+
+    pub fn new_all_set(n_vars: usize) -> Self {
+        Self(bitvec![1; n_vars])
     }
 
     pub fn and_assign(&mut self, other: &InvolvedVars) {
@@ -38,12 +44,22 @@ impl InvolvedVars {
         literals.iter().for_each(|l| self.set_literal(*l));
     }
 
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
     pub fn count_ones(&self) -> usize {
         self.0.count_ones()
     }
 
     pub fn count_zeros(&self) -> usize {
         self.0.count_zeros()
+    }
+
+    pub fn iter_missing_literals(&self) -> impl Iterator<Item = Literal> + '_ {
+        self.0
+            .iter_zeros()
+            .map(|i| Literal::from(isize::try_from(i + 1).unwrap()))
     }
 
     pub fn any(&self) -> bool {

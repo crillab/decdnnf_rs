@@ -39,6 +39,62 @@ impl<'a> ModelIteratorVisitorData {
             }
         }
     }
+
+    fn add_free_vars(&mut self, missing_vars: &InvolvedVars) {
+        let additional_children = missing_vars.iter_pos_literals().map(|l| {
+            (
+                vec![] as Vec<Literal>,
+                ModelIteratorVisitorData::new_free_var(l, missing_vars.len()),
+            )
+        });
+        match &mut self.children {
+            ModelIteratorVisitorDataChildren::SingleModel(m) => {
+                let mut product_children = additional_children.collect::<Vec<_>>();
+                product_children.iter_mut().for_each(|c| c.0 = m.clone());
+                self.children = ModelIteratorVisitorDataChildren::Product(product_children);
+            }
+            ModelIteratorVisitorDataChildren::None => {}
+            ModelIteratorVisitorDataChildren::Sequence(_) => {
+                let mut placeholder = ModelIteratorVisitorDataChildren::None;
+                std::mem::swap(&mut self.children, &mut placeholder);
+                let new_children = additional_children
+                    .chain(std::iter::once((
+                        vec![],
+                        ModelIteratorVisitorData {
+                            involved_vars: self.involved_vars.clone(),
+                            children: placeholder,
+                        },
+                    )))
+                    .collect();
+                self.children = ModelIteratorVisitorDataChildren::Product(new_children);
+            }
+            ModelIteratorVisitorDataChildren::Product(children) => {
+                children.append(&mut additional_children.collect());
+            }
+        }
+        self.involved_vars.or_assign(missing_vars);
+    }
+
+    fn new_single_model(model: Vec<Literal>, n_vars: usize) -> Self {
+        let mut involved_vars = InvolvedVars::new(n_vars);
+        involved_vars.set_literals(&model);
+        Self {
+            involved_vars,
+            children: ModelIteratorVisitorDataChildren::SingleModel(model),
+        }
+    }
+
+    fn new_free_var(l: Literal, n_vars: usize) -> Self {
+        let mut involved_vars = InvolvedVars::new(n_vars);
+        involved_vars.set_literal(l);
+        Self {
+            involved_vars,
+            children: ModelIteratorVisitorDataChildren::Sequence(vec![
+                (vec![], Self::new_single_model(vec![l], n_vars)),
+                (vec![], Self::new_single_model(vec![l.flip()], n_vars)),
+            ]),
+        }
+    }
 }
 
 struct ModelSequenceIterator<'a> {
@@ -233,12 +289,21 @@ impl BottomUpVisitor<ModelIteratorVisitorData> for ModelIteratorVisitor {
         path: &[NodeIndex],
         children: Vec<(&[Literal], ModelIteratorVisitorData)>,
     ) -> ModelIteratorVisitorData {
-        let involved_vars = merge_involved_vars(&children, ddnnf.n_vars());
-        let new_children = children
+        let merged_involved_vars = merge_involved_vars(&children, ddnnf.n_vars());
+        let mut new_children = children
             .into_iter()
             .map(|c| (c.0.to_vec(), c.1))
             .filter(|c| !matches!(c.1.children, ModelIteratorVisitorDataChildren::None))
             .collect::<Vec<_>>();
+        for new_child in &mut new_children {
+            let mut child_vars = new_child.1.involved_vars.clone();
+            child_vars.set_literals(&new_child.0);
+            let mut missing_vars = merged_involved_vars.clone();
+            missing_vars.xor_assign(&child_vars);
+            if missing_vars.count_ones() != 0 {
+                new_child.1.add_free_vars(&missing_vars);
+            }
+        }
         let data_children = if new_children.is_empty() {
             ModelIteratorVisitorDataChildren::None
         } else {
@@ -246,7 +311,7 @@ impl BottomUpVisitor<ModelIteratorVisitorData> for ModelIteratorVisitor {
         };
         adapt_for_root(
             ModelIteratorVisitorData {
-                involved_vars,
+                involved_vars: merged_involved_vars,
                 children: data_children,
             },
             path,
@@ -255,10 +320,7 @@ impl BottomUpVisitor<ModelIteratorVisitorData> for ModelIteratorVisitor {
 
     fn new_for_true(&self, ddnnf: &DecisionDNNF, path: &[NodeIndex]) -> ModelIteratorVisitorData {
         adapt_for_root(
-            ModelIteratorVisitorData {
-                involved_vars: InvolvedVars::new(ddnnf.n_vars()),
-                children: ModelIteratorVisitorDataChildren::SingleModel(vec![]),
-            },
+            ModelIteratorVisitorData::new_single_model(vec![], ddnnf.n_vars()),
             path,
         )
     }
@@ -290,24 +352,11 @@ fn adapt_for_root(data: ModelIteratorVisitorData, path: &[NodeIndex]) -> ModelIt
     if path.len() == 1 && data.involved_vars.count_zeros() > 0 {
         let n_vars = data.involved_vars.len();
         let mut new_children = vec![(vec![], data)];
-        let true_child = || ModelIteratorVisitorData {
-            involved_vars: InvolvedVars::new(n_vars),
-            children: ModelIteratorVisitorDataChildren::SingleModel(vec![]),
-        };
         let involved_so_far = new_children[0].1.involved_vars.clone();
         for l in involved_so_far.iter_missing_literals() {
             let mut child_involved_vars = InvolvedVars::new(n_vars);
             child_involved_vars.set_literal(l);
-            new_children.push((
-                vec![],
-                ModelIteratorVisitorData {
-                    involved_vars: child_involved_vars,
-                    children: ModelIteratorVisitorDataChildren::Sequence(vec![
-                        (vec![l], true_child()),
-                        (vec![l.flip()], true_child()),
-                    ]),
-                },
-            ));
+            new_children.push((vec![], ModelIteratorVisitorData::new_free_var(l, n_vars)));
         }
         ModelIteratorVisitorData {
             involved_vars: InvolvedVars::new_all_set(n_vars),
@@ -385,6 +434,21 @@ mod tests {
         assert_models_eq(
             "o 1 0\na 2 0\na 3 0\nt 4 0\n1 2 0\n1 3 0\n2 4 -1 0\n2 4 -2 0\n3 4 1 0\n3 4 2 0\n",
             vec![vec![-1, -2], vec![1, 2]],
+            None,
+        );
+    }
+
+    #[test]
+    fn test_2_vars_3_models() {
+        assert_models_eq(
+            r"o 1 0
+            o 2 0
+            t 3 0
+            2 3 -1 -2 0
+            2 3 1 0
+            1 2 0
+            ",
+            vec![vec![-1, -2], vec![1, -2], vec![1, 2]],
             None,
         );
     }

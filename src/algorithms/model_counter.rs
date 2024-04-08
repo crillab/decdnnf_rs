@@ -171,4 +171,22 @@ mod tests {
             )
         );
     }
+
+    #[test]
+    fn test_implied_lit() {
+        assert_eq!(
+            2,
+            model_count(
+                r"
+                o 1 0
+                o 2 0
+                t 3 0
+                f 4 0
+                2 3 -1 0
+                2 4 1 0
+                1 2 0",
+                Some(2)
+            )
+        );
+    }
 }

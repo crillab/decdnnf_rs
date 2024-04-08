@@ -5,8 +5,7 @@ pub use algorithms::CheckingVisitor;
 pub use algorithms::CheckingVisitorData;
 pub use algorithms::ModelCountingVisitor;
 pub use algorithms::ModelCountingVisitorData;
-pub use algorithms::ModelIteratorVisitor;
-pub use algorithms::ModelIteratorVisitorData;
+pub use algorithms::ModelIterator;
 
 mod core;
 pub use core::BiBottomUpVisitor;

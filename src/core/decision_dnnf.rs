@@ -77,6 +77,7 @@ impl Debug for Literal {
 /// A Decision-DNNF node.
 ///
 /// Note that there aren't literal nodes: they are encoded as arcs targeting true nodes and propagated literals.
+#[derive(Debug)]
 pub enum Node {
     /// A conjunction node, associated with the edges to its children.
     And(Vec<EdgeIndex>),
@@ -113,6 +114,7 @@ impl FromStr for Node {
 }
 
 /// An edge targets a node and propagates literals, in the spirit of recent [d4](https://github.com/crillab/d4) versions.
+#[derive(Debug)]
 pub struct Edge {
     target: NodeIndex,
     propagated: Vec<Literal>,
@@ -137,6 +139,7 @@ impl Edge {
 }
 
 /// A Decision-DNNF formula.
+#[derive(Debug)]
 pub struct DecisionDNNF {
     n_vars: usize,
     nodes: NodeVec,
@@ -184,7 +187,7 @@ impl DecisionDNNF {
 macro_rules! index_type {
     ($type_name:ident, $index_name:ident, $vec_index_name:ident) => {
         #[doc = concat!("An index type dedicated to [`", stringify!($type_name), "`] objects.")]
-        #[derive(Copy, Clone)]
+        #[derive(Copy, Clone, Debug)]
         pub struct $index_name(usize);
 
         impl From<usize> for $index_name {
@@ -200,6 +203,7 @@ macro_rules! index_type {
         }
 
         #[doc = concat!("A vector of [`", stringify!($type_name), "`] objects.")]
+        #[derive(Debug)]
         pub struct $vec_index_name(Vec<$type_name>);
 
         impl $vec_index_name {

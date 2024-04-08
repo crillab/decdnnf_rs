@@ -20,6 +20,9 @@ path = "src/lib.rs"
 name = "decdnnf_rs"
 path = "src/main.rs"
 
+[profile.release]
+debug = true
+
 [dependencies]
 anyhow = "1.0"
 bitvec = "1.0"

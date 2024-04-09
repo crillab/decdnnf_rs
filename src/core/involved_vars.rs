@@ -48,6 +48,10 @@ impl InvolvedVars {
         literals.iter().for_each(|l| self.set_literal(*l));
     }
 
+    pub fn is_set(&self, l: Literal) -> bool {
+        *self.0.get(l.var_index()).unwrap()
+    }
+
     pub fn len(&self) -> usize {
         self.0.len()
     }

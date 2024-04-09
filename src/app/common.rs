@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use crusti_app_helper::{info, Arg, ArgMatches};
-use decdnnf_rs::{D4Reader, DecisionDNNF};
+use decdnnf_rs::{D4Reader, DecisionDNNF, Literal};
 use std::{
     fs::{self, File},
     io::BufReader,
@@ -54,4 +54,12 @@ fn realpath_from_arg(arg_matches: &ArgMatches<'_>, arg: &str) -> Result<PathBuf>
     let file_path = arg_matches.value_of(arg).unwrap();
     fs::canonicalize(PathBuf::from(file_path))
         .with_context(|| format!(r#"while opening file "{file_path}""#))
+}
+
+pub(crate) fn print_dimacs_model(model: &[Literal]) {
+    print!("v");
+    for l in model {
+        print!(" {l}");
+    }
+    println!(" 0");
 }

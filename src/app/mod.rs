@@ -1,5 +1,8 @@
 mod common;
 
+mod model_computer;
+pub(crate) use model_computer::Command as ModelComputerCommand;
+
 mod model_counting;
 pub(crate) use model_counting::Command as ModelCountingCommand;
 

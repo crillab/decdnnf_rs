@@ -34,11 +34,7 @@ impl<'a> crusti_app_helper::Command<'a> for Command {
         let model_iterator = ModelIterator::new(&ddnnf);
         for model in model_iterator {
             n_models += 1;
-            print!("v");
-            for l in model {
-                print!(" {l}");
-            }
-            println!(" 0");
+            common::print_dimacs_model(&model);
         }
         info!("enumerated {n_models} models");
         Ok(())

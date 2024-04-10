@@ -1,5 +1,4 @@
 use super::common;
-use anyhow::anyhow;
 use crusti_app_helper::{App, AppSettings, SubCommand};
 use decdnnf_rs::{BiBottomUpVisitor, BottomUpTraversal, CheckingVisitor, ModelCountingVisitor};
 
@@ -30,9 +29,7 @@ impl<'a> crusti_app_helper::Command<'a> for Command {
         );
         let traversal_engine = BottomUpTraversal::new(Box::new(traversal_visitor));
         let (checking_data, model_counting_data) = traversal_engine.traverse(&ddnnf);
-        if let Some(e) = checking_data.get_error() {
-            return Err(anyhow!("{e}"));
-        }
+        common::print_warnings_and_errors(&checking_data)?;
         println!("{}", model_counting_data.n_models());
         Ok(())
     }

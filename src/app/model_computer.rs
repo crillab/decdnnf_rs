@@ -1,5 +1,4 @@
 use super::common;
-use anyhow::anyhow;
 use crusti_app_helper::{App, AppSettings, Arg, SubCommand};
 use decdnnf_rs::{BottomUpTraversal, CheckingVisitor, Literal, ModelFinder};
 
@@ -38,9 +37,7 @@ impl<'a> crusti_app_helper::Command<'a> for Command {
         let traversal_visitor = Box::<CheckingVisitor>::default();
         let traversal_engine = BottomUpTraversal::new(traversal_visitor);
         let checking_data = traversal_engine.traverse(&ddnnf);
-        if let Some(e) = checking_data.get_error() {
-            return Err(anyhow!("{e}"));
-        }
+        common::print_warnings_and_errors(&checking_data)?;
         let assumptions = if let Some(str_assumptions) = arg_matches.value_of(ARG_ASSUMPTIONS) {
             str_assumptions
                 .split_whitespace()

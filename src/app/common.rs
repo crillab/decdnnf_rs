@@ -1,6 +1,6 @@
-use anyhow::{Context, Result};
-use crusti_app_helper::{info, Arg, ArgMatches};
-use decdnnf_rs::{D4Reader, DecisionDNNF, Literal};
+use anyhow::{anyhow, Context, Result};
+use crusti_app_helper::{info, warn, Arg, ArgMatches};
+use decdnnf_rs::{CheckingVisitorData, D4Reader, DecisionDNNF, Literal};
 use std::{
     fs::{self, File},
     io::BufReader,
@@ -62,4 +62,15 @@ pub(crate) fn print_dimacs_model(model: &[Literal]) {
         print!(" {l}");
     }
     println!(" 0");
+}
+
+pub(crate) fn print_warnings_and_errors(checking_data: &CheckingVisitorData) -> anyhow::Result<()> {
+    for w in checking_data.get_warnings() {
+        warn!("{w}");
+    }
+    if let Some(e) = checking_data.get_error() {
+        Err(anyhow!("{e}"))
+    } else {
+        Ok(())
+    }
 }

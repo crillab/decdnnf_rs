@@ -11,6 +11,8 @@ pub struct CheckingVisitor;
 #[derive(Clone)]
 pub struct CheckingVisitorData {
     error: Option<String>,
+    warnings: Vec<String>,
+    is_false_node: bool,
     involved_vars: InvolvedVars,
 }
 
@@ -18,6 +20,8 @@ impl CheckingVisitorData {
     fn new_error(message: String) -> Self {
         Self {
             error: Some(message),
+            warnings: vec![],
+            is_false_node: false,
             involved_vars: InvolvedVars::empty(),
         }
     }
@@ -25,13 +29,17 @@ impl CheckingVisitorData {
     fn new_involved_vars(involved_vars: InvolvedVars) -> Self {
         Self {
             error: None,
+            warnings: vec![],
+            is_false_node: false,
             involved_vars,
         }
     }
 
-    fn new_for_leaf(n_vars: usize) -> Self {
+    fn new_for_leaf(n_vars: usize, is_false_node: bool) -> Self {
         Self {
             error: None,
+            warnings: vec![],
+            is_false_node,
             involved_vars: InvolvedVars::new(n_vars),
         }
     }
@@ -40,6 +48,13 @@ impl CheckingVisitorData {
     #[must_use]
     pub fn get_error(&self) -> Option<&str> {
         self.error.as_deref()
+    }
+
+    /// Returns the list of warnings produced by the checker.
+    /// The list is empty if none.
+    #[must_use]
+    pub fn get_warnings(&self) -> &[String] {
+        &self.warnings
     }
 }
 
@@ -85,10 +100,15 @@ impl BottomUpVisitor<CheckingVisitorData> for CheckingVisitor {
         if let Some(error) = get_error(&children) {
             return error;
         }
+        let mut warnings = Vec::new();
         for i in 0..children.len() - 1 {
+            if children[i].1.is_false_node {
+                continue;
+            }
             for j in i + 1..children.len() {
-                if !are_contradictory(children[i].0, children[j].0) {
-                    return CheckingVisitorData::new_error(format!("OR children at indices {i} and {j} may not be contradictory (OR node index is {})", usize::from(*path.last()
+                if !children[j].1.is_false_node && !are_contradictory(children[i].0, children[j].0)
+                {
+                    warnings.push(format!("OR children at indices {i} and {j} may not be contradictory (OR node index is {})", usize::from(*path.last()
                 .unwrap())));
                 }
             }
@@ -101,15 +121,17 @@ impl BottomUpVisitor<CheckingVisitorData> for CheckingVisitor {
                 acc
             },
         );
-        CheckingVisitorData::new_involved_vars(involved_vars)
+        let mut result = CheckingVisitorData::new_involved_vars(involved_vars);
+        result.warnings = warnings;
+        result
     }
 
     fn new_for_true(&self, ddnnf: &DecisionDNNF, _path: &[NodeIndex]) -> CheckingVisitorData {
-        CheckingVisitorData::new_for_leaf(ddnnf.n_vars())
+        CheckingVisitorData::new_for_leaf(ddnnf.n_vars(), false)
     }
 
     fn new_for_false(&self, ddnnf: &DecisionDNNF, _path: &[NodeIndex]) -> CheckingVisitorData {
-        CheckingVisitorData::new_for_leaf(ddnnf.n_vars())
+        CheckingVisitorData::new_for_leaf(ddnnf.n_vars(), true)
     }
 }
 
@@ -147,9 +169,10 @@ mod tests {
         let ddnnf = D4Reader::read(str_ddnnf.as_bytes()).unwrap();
         let traversal = BottomUpTraversal::new(Box::<CheckingVisitor>::default());
         let result = traversal.traverse(&ddnnf);
+        assert!(result.error.is_none());
         assert_eq!(
-            "OR children at indices 0 and 1 may not be contradictory (OR node index is 0)",
-            result.error.unwrap()
+            vec!["OR children at indices 0 and 1 may not be contradictory (OR node index is 0)"],
+            result.warnings
         );
     }
 
@@ -157,6 +180,15 @@ mod tests {
     fn test_ok() {
         let str_ddnnf =
             "a 1 0\no 2 0\no 3 0\nt 4 0\n1 2 0\n1 3 0\n2 4 -1 0\n2 4 1 0\n3 4 -2 0\n3 4 2 0\n";
+        let ddnnf = D4Reader::read(str_ddnnf.as_bytes()).unwrap();
+        let traversal = BottomUpTraversal::new(Box::<CheckingVisitor>::default());
+        let result = traversal.traverse(&ddnnf);
+        assert!(result.error.is_none());
+    }
+
+    #[test]
+    fn test_or_determinism_with_false_node() {
+        let str_ddnnf = "o 1 0\nt 2 0\nf 3 0\n1 2 1 0\n1 3 0";
         let ddnnf = D4Reader::read(str_ddnnf.as_bytes()).unwrap();
         let traversal = BottomUpTraversal::new(Box::<CheckingVisitor>::default());
         let result = traversal.traverse(&ddnnf);

@@ -10,4 +10,4 @@ mod model_finder;
 pub use model_finder::ModelFinder;
 
 mod model_iterator;
-pub use model_iterator::ModelIterator;
+pub use model_iterator::ModelEnumerator;

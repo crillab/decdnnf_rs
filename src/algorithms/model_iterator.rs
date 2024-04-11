@@ -1,18 +1,23 @@
 use crate::{core::InvolvedVars, DecisionDNNF, Literal, Node, NodeIndex};
 
 /// A structure used to enumerate the models of a [`DecisionDNNF`].
+///
+/// After building an enumerator with the `new` function, just call `compute_next_model` until you get `None`.
 #[derive(Debug)]
-pub struct ModelIterator<'a> {
+pub struct ModelEnumerator<'a> {
     ddnnf: &'a DecisionDNNF,
     or_edge_indices: Vec<usize>,
     or_free_vars: Vec<Vec<Vec<Literal>>>,
     root_free_vars: Vec<Literal>,
-    next_model: Option<Vec<Literal>>,
+    first_computed: bool,
+    model: Vec<Literal>,
+    has_model: bool,
 }
 
-impl<'a> ModelIterator<'a> {
+impl<'a> ModelEnumerator<'a> {
     /// Builds a new model iterator for a [`DecisionDNNF`].
     #[must_use]
+    #[allow(clippy::missing_panics_doc)]
     pub fn new(ddnnf: &'a DecisionDNNF) -> Self {
         let n_nodes = ddnnf.nodes().as_slice().len();
         let mut result = Self {
@@ -20,28 +25,26 @@ impl<'a> ModelIterator<'a> {
             or_edge_indices: vec![0; n_nodes],
             or_free_vars: vec![vec![]; n_nodes],
             root_free_vars: vec![],
-            next_model: None,
+            first_computed: false,
+            model: (1_isize..=isize::try_from(ddnnf.n_vars()).unwrap())
+                .map(Literal::from)
+                .collect(),
+            has_model: true,
         };
         result.compute_free_vars();
-        result.first_path_from(NodeIndex::from(0));
-        result.next_model = if let Node::False = ddnnf.nodes()[NodeIndex::from(0)] {
-            None
-        } else {
-            Some(result.current_model())
-        };
         result
     }
 
     fn compute_free_vars(&mut self) {
         let mut involved_vars = vec![None; self.or_free_vars.len()];
         self.compute_free_vars_from(NodeIndex::from(0), &mut involved_vars);
-        self.root_free_vars.append(
-            &mut involved_vars[0]
-                .as_ref()
-                .unwrap()
-                .iter_missing_literals()
-                .collect(),
-        );
+        let root_free_vars = involved_vars[0]
+            .as_ref()
+            .unwrap()
+            .iter_missing_literals()
+            .collect::<Vec<_>>();
+        Self::update_model_with_propagations(&mut self.model, &root_free_vars);
+        self.root_free_vars = root_free_vars;
     }
 
     fn compute_free_vars_from(
@@ -92,23 +95,39 @@ impl<'a> ModelIterator<'a> {
         union
     }
 
-    fn next_path(&mut self) -> bool {
-        if Self::next_free_vars_interpretation(&mut self.root_free_vars) {
-            true
+    /// Computes the next model and returns it.
+    pub fn compute_next_model(&mut self) -> Option<&[Literal]> {
+        if !self.first_computed {
+            self.first_computed = true;
+            if self.first_path_from(NodeIndex::from(0)) {
+                self.has_model = true;
+                return Some(&self.model);
+            }
+            self.has_model = false;
+            return None;
+        }
+        if !self.has_model {
+            return None;
+        }
+        if !Self::next_free_vars_interpretation(&mut self.model, &mut self.root_free_vars)
+            && !self.next_path_from(NodeIndex::from(0))
+        {
+            self.has_model = false;
+            None
         } else {
-            self.next_path_from(NodeIndex::from(0))
+            Some(&self.model)
         }
     }
 
     fn next_path_from(&mut self, from: NodeIndex) -> bool {
         match &self.ddnnf.nodes()[from] {
             Node::And(edges) => {
-                for edge in edges.iter().rev() {
-                    let target = self.ddnnf.edges()[*edge].target();
-                    if self.next_path_from(target) {
+                for edge_index in edges.iter().rev() {
+                    let edge = &self.ddnnf.edges()[*edge_index];
+                    if self.next_path_from(edge.target()) {
                         return true;
                     }
-                    self.first_path_from(target);
+                    self.first_path_from(edge.target());
                 }
                 false
             }
@@ -117,8 +136,9 @@ impl<'a> ModelIterator<'a> {
                 if self.next_or_node_free_vars_interpretation(from, child_index) {
                     return true;
                 }
-                let mut target = self.ddnnf.edges()[edges[child_index]].target();
-                if self.next_path_from(target) {
+                let edge = &self.ddnnf.edges()[edges[child_index]];
+                Self::update_model_with_propagations(&mut self.model, edge.propagated());
+                if self.next_path_from(edge.target()) {
                     return true;
                 }
                 loop {
@@ -127,8 +147,14 @@ impl<'a> ModelIterator<'a> {
                     }
                     child_index += 1;
                     self.or_edge_indices[usize::from(from)] += child_index;
-                    target = self.ddnnf.edges()[edges[child_index]].target();
-                    if self.first_path_from(target) {
+                    let edge = &self.ddnnf.edges()[edges[child_index]];
+                    Self::update_model_with_propagations(
+                        &mut self.model,
+                        &self.or_free_vars[usize::from(from)]
+                            [self.or_edge_indices[usize::from(from)]],
+                    );
+                    Self::update_model_with_propagations(&mut self.model, edge.propagated());
+                    if self.first_path_from(edge.target()) {
                         break;
                     }
                 }
@@ -144,12 +170,16 @@ impl<'a> ModelIterator<'a> {
         child_index: usize,
     ) -> bool {
         Self::next_free_vars_interpretation(
+            &mut self.model,
             &mut self.or_free_vars[usize::from(or_node)][child_index],
         )
     }
 
-    fn next_free_vars_interpretation(interpretation: &mut [Literal]) -> bool {
-        if let Some(p) = interpretation.iter().rposition(Literal::polarity) {
+    fn next_free_vars_interpretation(
+        model: &mut [Literal],
+        interpretation: &mut [Literal],
+    ) -> bool {
+        let has_next = if let Some(p) = interpretation.iter().rposition(Literal::polarity) {
             interpretation
                 .iter_mut()
                 .skip(p)
@@ -158,25 +188,34 @@ impl<'a> ModelIterator<'a> {
         } else {
             interpretation.iter_mut().for_each(|l| *l = l.flip());
             false
-        }
+        };
+        Self::update_model_with_propagations(model, interpretation);
+        has_next
     }
 
     fn first_path_from(&mut self, from: NodeIndex) -> bool {
         self.or_edge_indices[usize::from(from)] = 0;
         match &self.ddnnf.nodes()[from] {
             Node::And(edges) => {
-                for edge in edges {
-                    let target = self.ddnnf.edges()[*edge].target();
-                    if !self.first_path_from(target) {
+                for edge_index in edges {
+                    let edge = &self.ddnnf.edges()[*edge_index];
+                    Self::update_model_with_propagations(&mut self.model, edge.propagated());
+                    if !self.first_path_from(edge.target()) {
                         return false;
                     }
                 }
                 true
             }
             Node::Or(edges) => {
-                for edge in edges {
-                    let target = self.ddnnf.edges()[*edge].target();
-                    if self.first_path_from(target) {
+                for edge_index in edges {
+                    let edge = &self.ddnnf.edges()[*edge_index];
+                    Self::update_model_with_propagations(&mut self.model, edge.propagated());
+                    Self::update_model_with_propagations(
+                        &mut self.model,
+                        &self.or_free_vars[usize::from(from)]
+                            [self.or_edge_indices[usize::from(from)]],
+                    );
+                    if self.first_path_from(edge.target()) {
                         return true;
                     }
                     self.or_edge_indices[usize::from(from)] += 1;
@@ -188,48 +227,10 @@ impl<'a> ModelIterator<'a> {
         }
     }
 
-    fn current_model(&self) -> Vec<Literal> {
-        let mut model = Vec::with_capacity(self.ddnnf.n_vars());
-        model.append(&mut self.root_free_vars.clone());
-        self.current_model_from(NodeIndex::from(0), &mut model);
-        model
-    }
-
-    fn current_model_from(&self, from: NodeIndex, model: &mut Vec<Literal>) {
-        match &self.ddnnf.nodes()[from] {
-            Node::And(edges) => {
-                for edge_index in edges {
-                    let edge = &self.ddnnf.edges()[*edge_index];
-                    model.append(&mut edge.propagated().to_vec());
-                    let target = edge.target();
-                    self.current_model_from(target, model);
-                }
-            }
-            Node::Or(children) => {
-                let child_index = self.or_edge_indices[usize::from(from)];
-                let edge_index = children[child_index];
-                model.append(&mut self.or_free_vars[usize::from(from)][child_index].clone());
-                let edge = &self.ddnnf.edges()[edge_index];
-                model.append(&mut edge.propagated().to_vec());
-                let target = edge.target();
-                self.current_model_from(target, model);
-            }
-            Node::True | Node::False => {}
+    fn update_model_with_propagations(model: &mut [Literal], propagations: &[Literal]) {
+        for p in propagations {
+            model[p.var_index()] = *p;
         }
-    }
-}
-
-impl Iterator for ModelIterator<'_> {
-    type Item = Vec<Literal>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let result = self.next_model.take();
-        self.next_model = if self.next_path() {
-            Some(self.current_model())
-        } else {
-            None
-        };
-        result
     }
 }
 
@@ -248,11 +249,11 @@ mod tests {
         if let Some(n) = n_vars {
             ddnnf.update_n_vars(n);
         }
-        let model_it = ModelIterator::new(&ddnnf);
-        let mut actual = model_it
-            .inspect(|m| println!("got model {m:?}"))
-            .map(|v| v.iter().map(|l| isize::from(*l)).collect::<Vec<_>>())
-            .collect::<Vec<_>>();
+        let mut model_enum = ModelEnumerator::new(&ddnnf);
+        let mut actual = Vec::new();
+        while let Some(m) = model_enum.compute_next_model() {
+            actual.push(m.iter().map(|l| isize::from(*l)).collect::<Vec<_>>());
+        }
         sort(&mut actual);
         assert_eq!(expected, actual,);
     }

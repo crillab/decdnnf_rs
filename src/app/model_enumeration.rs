@@ -39,10 +39,8 @@ impl<'a> crusti_app_helper::Command<'a> for Command {
         common::print_warnings_and_errors(&checking_data)?;
         let mut n_enumerated = 0;
         let mut n_models = 0;
-        let mut model_iterator = ModelEnumerator::new(&ddnnf);
-        if arg_matches.is_present(ARG_COMPACT_FREE_VARS) {
-            model_iterator.elude_free_vars(true);
-        }
+        let mut model_iterator =
+            ModelEnumerator::new(&ddnnf, arg_matches.is_present(ARG_COMPACT_FREE_VARS));
         let mut sign_location = Vec::with_capacity(ddnnf.n_vars());
         let mut pattern = Vec::new();
         pattern.push(b'v');

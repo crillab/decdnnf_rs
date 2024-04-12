@@ -12,6 +12,19 @@ use std::{
 ///
 /// Such literals can be built from DIMACS representations using the [`From`] trait for isize.
 /// When a literal is displayed, the DIMACS representation is used.
+///
+/// # Example
+///
+/// ```
+/// use decdnnf_rs::Literal;
+///
+/// let l = Literal::from(1);
+/// assert_eq!(0, l.var_index());
+/// assert!(l.polarity());
+/// assert_eq!(0, l.flip().var_index());
+/// assert!(!l.flip().polarity());
+/// assert_eq!("1", format!("{l}"));
+/// ```
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub struct Literal(usize);
 
@@ -139,6 +152,13 @@ impl Edge {
 }
 
 /// A Decision-DNNF formula.
+///
+/// Decision-DNNF formulas (formerly defined as _Decision Graphs_) were defined here:
+///
+/// Hélène Fargier, Pierre Marquis:
+/// [On the Use of Partially Ordered Decision Graphs in Knowledge Compilation and Quantified Boolean Formulae.](http://www.cril.univ-artois.fr/~marquis/fargier-marquis-aaai06.pdf) AAAI 2006: 42-47
+///
+/// Decision-DNNFs are built by readers; see e.g. [`D4Reader`](crate::D4Reader).
 #[derive(Debug)]
 pub struct DecisionDNNF {
     n_vars: usize,
@@ -208,7 +228,9 @@ macro_rules! index_type {
 
         impl $vec_index_name {
             #[doc = concat!("Returns a ", stringify!($vec_index_name), " as a slice of [`", stringify!($type_name), "`].")]
-            #[must_use] pub fn as_slice(&self) -> &[$type_name] {
+            #[allow(dead_code)]
+            #[must_use]
+            pub fn as_slice(&self) -> &[$type_name] {
                 &self.0
             }
         }

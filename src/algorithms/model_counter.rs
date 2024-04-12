@@ -1,14 +1,31 @@
 use crate::{
-    core::{BottomUpVisitor, InvolvedVars},
-    DecisionDNNF, Literal, NodeIndex,
+    core::{BottomUpVisitor, InvolvedVars, NodeIndex},
+    DecisionDNNF, Literal,
 };
 use rug::Integer;
 
-/// A bottom-up visitor used for the model counting algorithm.
+/// A structure used to count the models of a [`DecisionDNNF`].
+///
+/// The algorithm takes a time polynomial in the size of the Decision-DNNF.
+///
+/// # Example
+///
+/// ```
+/// use decdnnf_rs::{BottomUpTraversal, DecisionDNNF, ModelCountingVisitor};
+///
+/// fn check_decision_dnnf(ddnnf: &DecisionDNNF) {
+///     let traversal = BottomUpTraversal::new(Box::<ModelCountingVisitor>::default());
+///     let result = traversal.traverse(&ddnnf);
+///     println!("the formula has {} models", result.n_models());
+/// }
+/// # check_decision_dnnf(&decdnnf_rs::D4Reader::read("t 1 0".as_bytes()).unwrap())
+/// ```
 #[derive(Default)]
 pub struct ModelCountingVisitor;
 
-/// The data used by the [`ModelCountingVisitor`] structure.
+/// The data returned by the [`ModelCountingVisitor`] algorithm.
+///
+/// See its documentation for more information.
 pub struct ModelCountingVisitorData {
     n_models: Integer,
     involved_vars: InvolvedVars,

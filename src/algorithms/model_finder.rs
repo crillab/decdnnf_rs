@@ -1,7 +1,37 @@
-use crate::{core::InvolvedVars, DecisionDNNF, EdgeIndex, Literal, Node, NodeIndex};
+use crate::{
+    core::{EdgeIndex, InvolvedVars, Node, NodeIndex},
+    DecisionDNNF, Literal,
+};
 
 /// A structure used to find models in a [`DecisionDNNF`].
-/// Can be used with or without assumptions.
+///
+/// Queries can involved assumption literals; in this case, the only models under consideration are the ones that involve such literals.
+/// In case models exists but none include those assumptions, then the query will return that no model exist.
+///
+/// # Example
+///
+/// ```
+/// use decdnnf_rs::{Literal, ModelFinder};
+///
+/// # fn gimme_ddnnf() -> decdnnf_rs::DecisionDNNF {let mut r = decdnnf_rs::D4Reader::read("t 1 0".as_bytes()).unwrap(); r.update_n_vars(1); r}
+/// let ddnnf = gimme_ddnnf();
+/// let model_finder = ModelFinder::new(&ddnnf);
+/// if let Some(model) = model_finder.find_model() {
+///     println!("the formula has models; here is one:");
+///     for l in model {
+///         print!("{l} ");
+///     }
+///     println!();
+///     if model_finder.find_model_under_assumptions(&[Literal::from(-1)]).is_some() {
+///         println!("some of them involve the literal -1");
+///     }
+///     if model_finder.find_model_under_assumptions(&[Literal::from(1)]).is_some() {
+///         println!("some of them involve the literal 1");
+///     }
+/// } else {
+///     println!("the formula has no model");
+/// }
+/// ```
 pub struct ModelFinder<'a> {
     ddnnf: &'a DecisionDNNF,
 }
@@ -20,8 +50,22 @@ impl<'a> ModelFinder<'a> {
     }
 
     /// Search for a model compatible with the provided assumptions.
+    ///
+    /// # Panics
+    ///
+    /// The literals must refer to existing variables.
+    /// In case the variable index of a literal is higher than the highest variable index in the formula, this function panics.
     #[must_use]
     pub fn find_model_under_assumptions(&self, assumptions: &[Literal]) -> Option<Vec<Literal>> {
+        if let Some(l) = assumptions
+            .iter()
+            .find(|l| l.var_index() >= self.ddnnf.n_vars())
+        {
+            panic!(
+                "no such literal: {l} (the formula has {} variables)",
+                self.ddnnf.n_vars()
+            );
+        }
         let mut pos_assumptions = InvolvedVars::new(self.ddnnf.n_vars());
         let mut neg_assumptions = InvolvedVars::new(self.ddnnf.n_vars());
         for assumption in assumptions {
@@ -292,5 +336,12 @@ mod tests {
         assert_has_no_model(str_ddnnf, &[-1, 2], None);
         assert_has_no_model(str_ddnnf, &[1, -2], None);
         assert_model_eq(str_ddnnf, &[-1, -2], vec![-1, -2], None);
+    }
+
+    #[test]
+    #[should_panic(expected = "no such literal: -1 (the formula has 0 variables)")]
+    fn test_no_such_literal() {
+        let str_ddnnf = "t 1 0";
+        assert_has_model(str_ddnnf, &[-1], None);
     }
 }

@@ -1,4 +1,7 @@
-use crate::{core::Literal, DecisionDNNF, EdgeIndex, Node, NodeIndex};
+use crate::{
+    core::{EdgeIndex, Literal, Node, NodeIndex},
+    DecisionDNNF,
+};
 use anyhow::{anyhow, Context, Result};
 use rustc_hash::FxHashMap;
 use std::io::BufWriter;

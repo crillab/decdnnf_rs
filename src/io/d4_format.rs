@@ -1,4 +1,5 @@
-use crate::{DecisionDNNF, Edge, Literal, Node, NodeIndex};
+use crate::core::{Edge, Node, NodeIndex};
+use crate::{DecisionDNNF, Literal};
 use anyhow::{anyhow, Context, Result};
 use std::str::FromStr;
 use std::{

@@ -1,11 +1,82 @@
-use crate::{core::InvolvedVars, DecisionDNNF, EdgeIndex, Literal, Node, NodeIndex};
+use crate::{
+    core::{EdgeIndex, InvolvedVars, Node, NodeIndex},
+    DecisionDNNF, Literal,
+};
 
 /// A structure used to enumerate the models of a [`DecisionDNNF`].
 ///
-/// After building an enumerator with the [`new`](Self::new) function, just call [`compute_next_model`](Self::compute_next_model) until you get [`None`].
-/// Each call which is not [`None`] returns a model, in which free variables can be eluded (disabled by default); see [`elude_free_vars`](Self::elude_free_vars) for more information.
-///
+/// After building an enumerator with the [`new`](Self::new) function, call [`compute_next_model`](Self::compute_next_model) until you get [`None`].
+/// Each call which is not [`None`] returns a model, in which free variables may be eluded (see below).
 /// The algorithm takes a time polynomial in the number of models and a size polynomial in the size of the Decision-DNNF.
+///
+/// When creating the enumerator, you must indicate if you want to elude the free variables.
+/// If you choose not to elude the free variables, then the algorithm will process a traditional enumeration:
+/// the models returned by [`compute_next_model`](Self::compute_next_model) will contain exactly one literal by variable (i.e. no literal will be [`None`]).
+/// If you choose to elude free variables, then they will be absent from models (replaced by [`None`]).
+/// In this case, the algorithm won't produce one model by literal polarity, but this single model where the variable is absent.
+/// Eluding free variables results in shorter enumerations, since each partial model that is returned represents a number of models equals to 2 at the power of the number of eluded variables.
+///
+/// # Examples
+///
+/// Printing models like SAT solvers:
+///
+/// ```
+/// use decdnnf_rs::{DecisionDNNF, ModelEnumerator};
+///
+/// fn print_models(ddnnf: &DecisionDNNF) {
+///     let mut model_enumerator = ModelEnumerator::new(&ddnnf, false);
+///     while let Some(model) = model_enumerator.compute_next_model() {
+///         print!("v");
+///         for opt_l in model {
+///             if let Some(l) = opt_l {
+///                 print!(" {}", isize::from(*l));
+///             }
+///         }
+///         println!(" 0");
+///     }
+/// }
+/// # print_models(&decdnnf_rs::D4Reader::read("t 1 0".as_bytes()).unwrap())
+/// ```
+///
+/// Free variables elusion:
+///
+/// ```
+/// use decdnnf_rs::{D4Reader, Literal, ModelEnumerator};
+///
+/// // A Decision-DNNF with two models: -1 2 and 1 2
+/// let ddnnf = D4Reader::read(r"
+/// a 1 0
+/// t 2 0
+/// 1 2 2 0
+/// ".as_bytes()).unwrap();
+///
+/// // a model sorting function, for comparison purpose
+/// let sort = |models: &mut [Vec<isize>]| {
+///     models.iter_mut().for_each(|m| {
+///         m.sort_unstable_by_key(|l| l.unsigned_abs());
+///     });
+///     models.sort_unstable();
+/// };
+///
+/// // no free variable elusion
+/// let mut enumerator = ModelEnumerator::new(&ddnnf, false);
+/// let mut models: Vec<Vec<isize>> = Vec::new();
+/// while let Some(model) = enumerator.compute_next_model() {
+///     models.push(model.iter().filter_map(|opt_l| opt_l.map(|l| isize::from(l))).collect());
+/// }
+/// sort(&mut models);
+/// let mut expected = vec![vec![-1, 2], vec![1, 2]];
+/// sort(&mut expected);
+/// assert_eq!(expected, models);
+///
+/// // with free variable elusion
+/// let mut enumerator = ModelEnumerator::new(&ddnnf, true);
+/// let mut models: Vec<Vec<isize>> = Vec::new();
+/// while let Some(model) = enumerator.compute_next_model() {
+///     models.push(model.iter().filter_map(|opt_l| opt_l.map(|l| isize::from(l))).collect());
+/// }
+/// assert_eq!(vec![vec![2]], models);
+/// ```
 #[derive(Debug)]
 pub struct ModelEnumerator<'a> {
     ddnnf: &'a DecisionDNNF,
@@ -20,9 +91,12 @@ pub struct ModelEnumerator<'a> {
 
 impl<'a> ModelEnumerator<'a> {
     /// Builds a new model enumerator for a [`DecisionDNNF`].
+    ///
+    /// The second parameter sets whether free variables should be eluded from models.
+    /// See top-level [`ModelEnumerator`] documentation for more information about free variables elusion.
     #[must_use]
     #[allow(clippy::missing_panics_doc)]
-    pub fn new(ddnnf: &'a DecisionDNNF) -> Self {
+    pub fn new(ddnnf: &'a DecisionDNNF, elude_free_vars: bool) -> Self {
         let n_nodes = ddnnf.nodes().as_slice().len();
         Self {
             ddnnf,
@@ -32,16 +106,8 @@ impl<'a> ModelEnumerator<'a> {
             first_computed: false,
             model: vec![None; ddnnf.n_vars()],
             has_model: true,
-            elude_free_vars: false,
+            elude_free_vars,
         }
-    }
-
-    /// Set whether free variables should be eluded from models.
-    ///
-    /// When free variables are eluded, the enumeration won't produce a model for each of the literals, resulting in a shorter enumeration process.
-    /// Instead, each returned  "model" will represent a number of models equals to 2 at the power of the number of eluded variables.
-    pub fn elude_free_vars(&mut self, v: bool) {
-        self.elude_free_vars = v;
     }
 
     fn compute_free_vars(&mut self) {
@@ -109,6 +175,7 @@ impl<'a> ModelEnumerator<'a> {
     }
 
     /// Computes the next model and returns it.
+    /// Returns `None` if all the models have been returned.
     pub fn compute_next_model(&mut self) -> Option<&[Option<Literal>]> {
         if !self.first_computed {
             return self.compute_first_model();
@@ -280,8 +347,7 @@ mod tests {
         if let Some(n) = n_vars {
             ddnnf.update_n_vars(n);
         }
-        let mut model_enum = ModelEnumerator::new(&ddnnf);
-        model_enum.elude_free_vars(hide_free_vars);
+        let mut model_enum = ModelEnumerator::new(&ddnnf, hide_free_vars);
         let mut actual = Vec::new();
         while let Some(m) = model_enum.compute_next_model() {
             actual.push(

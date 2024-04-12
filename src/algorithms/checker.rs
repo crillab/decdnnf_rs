@@ -1,13 +1,49 @@
 use crate::{
-    core::{BottomUpVisitor, InvolvedVars},
-    DecisionDNNF, Literal, NodeIndex,
+    core::{BottomUpVisitor, InvolvedVars, NodeIndex},
+    DecisionDNNF, Literal,
 };
 
-/// A bottom-up visitor used for an algorithm that checks if a Decision-DNNF is correct (i.e. it is really a Decision-DNNF).
+/// A bottom-up algorithm used for an algorithm that checks if a Decision-DNNF is correct.
+///
+/// The tests consists in checking the decomposability of the conjunction nodes and the determinism of the disjunction nodes.
+/// When using this checker, a violation of the decomposability property will trigger an error.
+/// However, the checking of the determinism is partial, in the sense a disjunction node that is determinist may not be recognized as is by this checker.
+/// For this reason, potential faults on determinism simply triggers warnings.
+/// Thus, even if the checking process does not returns an error, a check of the list of the warnings emitted during the search should be done.
+///
+/// The detection of an error stops the checking process.
+/// This is not the case when a warning is raised.
+///
+/// This object relies on the [`BottomUpVisitor`] trait.
+/// See its documentation for more information.
+///
+/// # Example
+///
+/// ```
+/// use decdnnf_rs::{BottomUpTraversal, CheckingVisitor, DecisionDNNF};
+///
+/// fn check_decision_dnnf(ddnnf: &DecisionDNNF) {
+///     let traversal = BottomUpTraversal::new(Box::<CheckingVisitor>::default());
+///     let result = traversal.traverse(&ddnnf);
+///     if let Some(e) = result.get_error() {
+///         println!("got an error: {e}");
+///     } else {
+///         println!("no error detected");
+///     }
+///     let warnings = result.get_warnings();
+///     println!("got {} warnings", warnings.len());
+///     for (i,w) in warnings.iter().enumerate() {
+///         println!("warning {i}: {w}");
+///     }
+/// }
+/// # check_decision_dnnf(&decdnnf_rs::D4Reader::read("t 1 0".as_bytes()).unwrap())
+/// ```
 #[derive(Clone, Default)]
 pub struct CheckingVisitor;
 
-/// The data used by the [`CheckingVisitor`] structure.
+/// The data returned by the [`CheckingVisitor`] algorithm.
+///
+/// See its documentation for more information.
 #[derive(Clone)]
 pub struct CheckingVisitorData {
     error: Option<String>,

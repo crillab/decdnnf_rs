@@ -1,5 +1,5 @@
-use super::decision_dnnf::{EdgeIndex, NodeIndex};
-use crate::{DecisionDNNF, Edge, Literal, Node};
+use super::{Edge, EdgeIndex, Node, NodeIndex};
+use crate::{DecisionDNNF, Literal};
 
 /// A structure used to apply algorithms on a Decision-DNNF in a bottom-up fashion.
 ///

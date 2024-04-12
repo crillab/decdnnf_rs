@@ -1,8 +1,11 @@
-use crate::{core::InvolvedVars, DecisionDNNF, Literal, Node, NodeIndex};
+use crate::{core::InvolvedVars, DecisionDNNF, EdgeIndex, Literal, Node, NodeIndex};
 
 /// A structure used to enumerate the models of a [`DecisionDNNF`].
 ///
-/// After building an enumerator with the `new` function, just call `compute_next_model` until you get `None`.
+/// After building an enumerator with the [`new`](Self::new) function, just call [`compute_next_model`](Self::compute_next_model) until you get [`None`].
+/// Each call which is not [`None`] returns a model, in which free variables can be eluded (disabled by default); see [`elude_free_vars`](Self::elude_free_vars) for more information.
+///
+/// The algorithm takes a time polynomial in the number of models and a size polynomial in the size of the Decision-DNNF.
 #[derive(Debug)]
 pub struct ModelEnumerator<'a> {
     ddnnf: &'a DecisionDNNF,
@@ -10,29 +13,35 @@ pub struct ModelEnumerator<'a> {
     or_free_vars: Vec<Vec<Vec<Literal>>>,
     root_free_vars: Vec<Literal>,
     first_computed: bool,
-    model: Vec<Literal>,
+    model: Vec<Option<Literal>>,
     has_model: bool,
+    elude_free_vars: bool,
 }
 
 impl<'a> ModelEnumerator<'a> {
-    /// Builds a new model iterator for a [`DecisionDNNF`].
+    /// Builds a new model enumerator for a [`DecisionDNNF`].
     #[must_use]
     #[allow(clippy::missing_panics_doc)]
     pub fn new(ddnnf: &'a DecisionDNNF) -> Self {
         let n_nodes = ddnnf.nodes().as_slice().len();
-        let mut result = Self {
+        Self {
             ddnnf,
             or_edge_indices: vec![0; n_nodes],
             or_free_vars: vec![vec![]; n_nodes],
             root_free_vars: vec![],
             first_computed: false,
-            model: (1_isize..=isize::try_from(ddnnf.n_vars()).unwrap())
-                .map(Literal::from)
-                .collect(),
+            model: vec![None; ddnnf.n_vars()],
             has_model: true,
-        };
-        result.compute_free_vars();
-        result
+            elude_free_vars: false,
+        }
+    }
+
+    /// Set whether free variables should be eluded from models.
+    ///
+    /// When free variables are eluded, the enumeration won't produce a model for each of the literals, resulting in a shorter enumeration process.
+    /// Instead, each returned  "model" will represent a number of models equals to 2 at the power of the number of eluded variables.
+    pub fn elude_free_vars(&mut self, v: bool) {
+        self.elude_free_vars = v;
     }
 
     fn compute_free_vars(&mut self) {
@@ -43,7 +52,11 @@ impl<'a> ModelEnumerator<'a> {
             .unwrap()
             .iter_missing_literals()
             .collect::<Vec<_>>();
-        Self::update_model_with_propagations(&mut self.model, &root_free_vars);
+        Self::update_model_with_propagations(
+            &mut self.model,
+            &root_free_vars,
+            self.elude_free_vars,
+        );
         self.root_free_vars = root_free_vars;
     }
 
@@ -96,26 +109,35 @@ impl<'a> ModelEnumerator<'a> {
     }
 
     /// Computes the next model and returns it.
-    pub fn compute_next_model(&mut self) -> Option<&[Literal]> {
+    pub fn compute_next_model(&mut self) -> Option<&[Option<Literal>]> {
         if !self.first_computed {
-            self.first_computed = true;
-            if self.first_path_from(NodeIndex::from(0)) {
-                self.has_model = true;
-                return Some(&self.model);
-            }
-            self.has_model = false;
-            return None;
+            return self.compute_first_model();
         }
         if !self.has_model {
             return None;
         }
-        if !Self::next_free_vars_interpretation(&mut self.model, &mut self.root_free_vars)
-            && !self.next_path_from(NodeIndex::from(0))
+        if !Self::next_free_vars_interpretation(
+            &mut self.model,
+            &mut self.root_free_vars,
+            self.elude_free_vars,
+        ) && !self.next_path_from(NodeIndex::from(0))
         {
             self.has_model = false;
             None
         } else {
             Some(&self.model)
+        }
+    }
+
+    fn compute_first_model(&mut self) -> Option<&[Option<Literal>]> {
+        self.first_computed = true;
+        self.compute_free_vars();
+        if self.first_path_from(NodeIndex::from(0)) {
+            self.has_model = true;
+            Some(&self.model)
+        } else {
+            self.has_model = false;
+            None
         }
     }
 
@@ -137,7 +159,7 @@ impl<'a> ModelEnumerator<'a> {
                     return true;
                 }
                 let edge = &self.ddnnf.edges()[edges[child_index]];
-                Self::update_model_with_propagations(&mut self.model, edge.propagated());
+                Self::update_model_with_propagations(&mut self.model, edge.propagated(), false);
                 if self.next_path_from(edge.target()) {
                     return true;
                 }
@@ -147,14 +169,7 @@ impl<'a> ModelEnumerator<'a> {
                     }
                     child_index += 1;
                     self.or_edge_indices[usize::from(from)] += child_index;
-                    let edge = &self.ddnnf.edges()[edges[child_index]];
-                    Self::update_model_with_propagations(
-                        &mut self.model,
-                        &self.or_free_vars[usize::from(from)]
-                            [self.or_edge_indices[usize::from(from)]],
-                    );
-                    Self::update_model_with_propagations(&mut self.model, edge.propagated());
-                    if self.first_path_from(edge.target()) {
+                    if self.update_or_edge(from, edges[child_index]) {
                         break;
                     }
                 }
@@ -172,13 +187,18 @@ impl<'a> ModelEnumerator<'a> {
         Self::next_free_vars_interpretation(
             &mut self.model,
             &mut self.or_free_vars[usize::from(or_node)][child_index],
+            self.elude_free_vars,
         )
     }
 
     fn next_free_vars_interpretation(
-        model: &mut [Literal],
+        model: &mut [Option<Literal>],
         interpretation: &mut [Literal],
+        elude_free_vars: bool,
     ) -> bool {
+        if elude_free_vars {
+            return false;
+        }
         let has_next = if let Some(p) = interpretation.iter().rposition(Literal::polarity) {
             interpretation
                 .iter_mut()
@@ -189,7 +209,7 @@ impl<'a> ModelEnumerator<'a> {
             interpretation.iter_mut().for_each(|l| *l = l.flip());
             false
         };
-        Self::update_model_with_propagations(model, interpretation);
+        Self::update_model_with_propagations(model, interpretation, false);
         has_next
     }
 
@@ -199,7 +219,7 @@ impl<'a> ModelEnumerator<'a> {
             Node::And(edges) => {
                 for edge_index in edges {
                     let edge = &self.ddnnf.edges()[*edge_index];
-                    Self::update_model_with_propagations(&mut self.model, edge.propagated());
+                    Self::update_model_with_propagations(&mut self.model, edge.propagated(), false);
                     if !self.first_path_from(edge.target()) {
                         return false;
                     }
@@ -208,14 +228,7 @@ impl<'a> ModelEnumerator<'a> {
             }
             Node::Or(edges) => {
                 for edge_index in edges {
-                    let edge = &self.ddnnf.edges()[*edge_index];
-                    Self::update_model_with_propagations(&mut self.model, edge.propagated());
-                    Self::update_model_with_propagations(
-                        &mut self.model,
-                        &self.or_free_vars[usize::from(from)]
-                            [self.or_edge_indices[usize::from(from)]],
-                    );
-                    if self.first_path_from(edge.target()) {
+                    if self.update_or_edge(from, *edge_index) {
                         return true;
                     }
                     self.or_edge_indices[usize::from(from)] += 1;
@@ -227,9 +240,22 @@ impl<'a> ModelEnumerator<'a> {
         }
     }
 
-    fn update_model_with_propagations(model: &mut [Literal], propagations: &[Literal]) {
+    fn update_or_edge(&mut self, or_node_index: NodeIndex, edge_index: EdgeIndex) -> bool {
+        let edge = &self.ddnnf.edges()[edge_index];
+        let or_free_vars = &self.or_free_vars[usize::from(or_node_index)]
+            [self.or_edge_indices[usize::from(or_node_index)]];
+        Self::update_model_with_propagations(&mut self.model, or_free_vars, self.elude_free_vars);
+        Self::update_model_with_propagations(&mut self.model, edge.propagated(), false);
+        self.first_path_from(edge.target())
+    }
+
+    fn update_model_with_propagations(
+        model: &mut [Option<Literal>],
+        propagations: &[Literal],
+        update_with_none: bool,
+    ) {
         for p in propagations {
-            model[p.var_index()] = *p;
+            model[p.var_index()] = if update_with_none { None } else { Some(*p) };
         }
     }
 }
@@ -239,7 +265,12 @@ mod tests {
     use super::*;
     use crate::D4Reader;
 
-    fn assert_models_eq(str_ddnnf: &str, mut expected: Vec<Vec<isize>>, n_vars: Option<usize>) {
+    fn assert_models_eq(
+        str_ddnnf: &str,
+        mut expected: Vec<Vec<isize>>,
+        n_vars: Option<usize>,
+        hide_free_vars: bool,
+    ) {
         let sort = |v: &mut Vec<Vec<isize>>| {
             v.iter_mut().for_each(|m| m.sort_unstable());
             v.sort_unstable();
@@ -250,9 +281,14 @@ mod tests {
             ddnnf.update_n_vars(n);
         }
         let mut model_enum = ModelEnumerator::new(&ddnnf);
+        model_enum.elude_free_vars(hide_free_vars);
         let mut actual = Vec::new();
         while let Some(m) = model_enum.compute_next_model() {
-            actual.push(m.iter().map(|l| isize::from(*l)).collect::<Vec<_>>());
+            actual.push(
+                m.iter()
+                    .filter_map(|opt_l| opt_l.map(isize::from))
+                    .collect::<Vec<_>>(),
+            );
         }
         sort(&mut actual);
         assert_eq!(expected, actual,);
@@ -260,17 +296,17 @@ mod tests {
 
     #[test]
     fn test_unsat() {
-        assert_models_eq("f 1 0\n", vec![], None);
+        assert_models_eq("f 1 0\n", vec![], None, false);
     }
 
     #[test]
     fn test_single_model() {
-        assert_models_eq("a 1 0\nt 2 0\n1 2 1 0\n", vec![vec![1]], None);
+        assert_models_eq("a 1 0\nt 2 0\n1 2 1 0\n", vec![vec![1]], None, false);
     }
 
     #[test]
     fn test_tautology() {
-        assert_models_eq("t 1 0\n", vec![vec![-1], vec![1]], Some(1));
+        assert_models_eq("t 1 0\n", vec![vec![-1], vec![1]], Some(1), false);
     }
 
     #[test]
@@ -279,6 +315,7 @@ mod tests {
             "o 1 0\nt 2 0\n1 2 -1 0\n 1 2 1 0\n",
             vec![vec![-1], vec![1]],
             None,
+            false,
         );
     }
 
@@ -288,6 +325,7 @@ mod tests {
             "a 1 0\nt 2 0\n1 2 -1 0\n 1 2 -2 0\n",
             vec![vec![-1, -2]],
             None,
+            false,
         );
     }
 
@@ -297,6 +335,7 @@ mod tests {
             "a 1 0\no 2 0\no 3 0\nt 4 0\n1 2 0\n1 3 0\n2 4 -1 0\n2 4 1 0\n3 4 -2 0\n3 4 2 0\n",
             vec![vec![-1, -2], vec![-1, 2], vec![1, -2], vec![1, 2]],
             None,
+            false,
         );
     }
 
@@ -306,6 +345,7 @@ mod tests {
             "o 1 0\na 2 0\na 3 0\nt 4 0\n1 2 0\n1 3 0\n2 4 -1 0\n2 4 -2 0\n3 4 1 0\n3 4 2 0\n",
             vec![vec![-1, -2], vec![1, 2]],
             None,
+            false,
         );
     }
 
@@ -321,6 +361,7 @@ mod tests {
             ",
             vec![vec![-1, -2], vec![1, -2], vec![1, 2]],
             None,
+            false,
         );
     }
 
@@ -337,6 +378,12 @@ mod tests {
             ",
             vec![vec![-1, -2], vec![-1, 2]],
             Some(2),
+            false,
         );
+    }
+
+    #[test]
+    fn test_hide_free_var_tautology() {
+        assert_models_eq("t 1 0", vec![vec![]], Some(2), true);
     }
 }

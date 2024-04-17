@@ -13,16 +13,38 @@ use std::{
 ///
 /// The output format of d4 is an extension of the initial format output by c2d.
 /// The description of the format is available on the [d4](https://github.com/crillab/d4) repository.
+///
+/// This reader performs syntactic checks (i.e. the input data follows the format).
+/// It also checks that the described formula has a single root and no cycles.
+/// The index of the root must be 1. The root must be the first node that is described.
+/// The decomposability of the conjunction nodes and the determinism of the disjunction nodes are not check by this reader.
+/// See [`CheckingVisitor`](crate::CheckingVisitor) if you need to assert these properties.
 pub struct Reader;
 
 impl Reader {
     /// Reads an instance and returns it.
     ///
-    /// It is assumed that the first node is the root, and that the first node index is 1.
-    ///
     /// # Errors
     ///
     /// An error is returned if the content of the instance does not follow the d4 format or one of the assumptions described above is not true.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use decdnnf_rs::{BottomUpTraversal, CheckingVisitor, DecisionDNNF, D4Reader};
+    ///
+    /// fn load_decision_dnnf(str_ddnnf: &str) -> Result<DecisionDNNF, String> {
+    ///     let ddnnf = D4Reader::read(str_ddnnf.as_bytes()).map_err(|e| e.to_string())?;
+    ///     let traversal = BottomUpTraversal::new(Box::<CheckingVisitor>::default());
+    ///     let checker_result = traversal.traverse(&ddnnf);
+    ///     if let Some(e) = checker_result.get_error() {
+    ///         Err(e.to_string())
+    ///     } else {
+    ///         Ok(ddnnf)
+    ///     }
+    /// }
+    /// # load_decision_dnnf("t 1 0").unwrap();
+    /// ```
     pub fn read<R>(reader: R) -> Result<DecisionDNNF>
     where
         R: Read,

@@ -176,7 +176,11 @@ impl DecisionDNNF {
     }
 
     /// Updates the number of variables.
+    ///
     /// The new number must be higher than the current number of variables.
+    /// This function is useful when you load a Decision DNNF in which the last variables are free; in this case, the formula itself is not sufficient to deduce the real number of variables.
+    /// For example, when considering the trivial, true, Decision-DNNF, the formula resumes to the `true` constant  whatever the number of variables.
+    /// Calling this function indicates real number of variables this formula relies on.
     ///
     /// # Panics
     ///
@@ -190,6 +194,8 @@ impl DecisionDNNF {
     }
 
     /// Returns the number of variables involved in this Decision-DNNF.
+    ///
+    /// In case the number of variables was updated by a call to [`update_n_vars`](Self::update_n_vars), then the updated value is returned.
     #[must_use]
     pub fn n_vars(&self) -> usize {
         self.n_vars

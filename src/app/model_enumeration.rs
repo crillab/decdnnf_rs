@@ -81,35 +81,46 @@ fn enum_decision_tree(arg_matches: &crusti_app_helper::ArgMatches<'_>) -> anyhow
         arg_matches.is_present(ARG_DO_NOT_PRINT),
     );
     let model_finder = ModelFinder::new(&ddnnf);
-    if let Some(model) = model_finder.find_model() {
-        enum_decision_tree_from(&model_finder, &mut vec![], &model, &mut model_writer);
+    let mut assumptions = Vec::with_capacity(ddnnf.n_vars());
+    let mut stack = Vec::with_capacity(ddnnf.n_vars() << 1);
+    let mut last_model = vec![];
+    let update_stack = |m: &[Literal], i, stack: &mut Vec<(bool, Literal)>| {
+        let shortcut_lit = *m.iter().find(|l| l.var_index() == i).unwrap();
+        stack.push((false, shortcut_lit.flip()));
+        stack.push((true, shortcut_lit));
+    };
+    if let Some(ref mut model) = model_finder.find_model() {
+        std::mem::swap(&mut last_model, model);
+        if ddnnf.n_vars() == 0 {
+            model_writer.write_model_no_opt(&[]);
+        } else {
+            update_stack(&last_model, 0, &mut stack);
+        }
+    }
+    while let Some((shortcut, lit)) = stack.pop() {
+        assumptions.truncate(lit.var_index());
+        assumptions.push(lit);
+        if shortcut {
+            if assumptions.len() == ddnnf.n_vars() {
+                model_writer.write_model_no_opt(&last_model);
+            } else {
+                update_stack(&last_model, assumptions.len(), &mut stack);
+            }
+        } else {
+            let opt_model = model_finder.find_model_under_assumptions(&assumptions);
+            if opt_model.is_some() {
+                let mut new_model = opt_model.unwrap();
+                std::mem::swap(&mut last_model, &mut new_model);
+                if assumptions.len() == ddnnf.n_vars() {
+                    model_writer.write_model_no_opt(&last_model);
+                } else {
+                    update_stack(&last_model, assumptions.len(), &mut stack);
+                }
+            }
+        }
     }
     model_writer.finalize();
     Ok(())
-}
-
-fn enum_decision_tree_from(
-    model_finder: &ModelFinder,
-    assumptions: &mut Vec<Literal>,
-    last_model: &[Literal],
-    model_writer: &mut ModelWriter,
-) {
-    if assumptions.len() == last_model.len() {
-        model_writer.write_model_no_opt(last_model);
-        return;
-    }
-    let new_var_in_model = *last_model
-        .iter()
-        .find(|l| l.var_index() == assumptions.len())
-        .unwrap();
-    assumptions.push(new_var_in_model);
-    enum_decision_tree_from(model_finder, assumptions, last_model, model_writer);
-    assumptions.pop();
-    assumptions.push(new_var_in_model.flip());
-    if let Some(model) = model_finder.find_model_under_assumptions(assumptions) {
-        enum_decision_tree_from(model_finder, assumptions, &model, model_writer);
-    }
-    assumptions.pop();
 }
 
 fn load_ddnnf(arg_matches: &crusti_app_helper::ArgMatches<'_>) -> anyhow::Result<DecisionDNNF> {

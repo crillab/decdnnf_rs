@@ -3,6 +3,7 @@ use crusti_app_helper::{info, App, AppSettings, Arg, SubCommand};
 use decdnnf_rs::{
     BottomUpTraversal, CheckingVisitor, DecisionDNNF, Literal, ModelEnumerator, ModelFinder,
 };
+use rug::Integer;
 use std::io::{BufWriter, StdoutLock, Write};
 
 #[derive(Default)]
@@ -136,8 +137,8 @@ struct ModelWriter {
     pattern: Vec<u8>,
     sign_location: Vec<usize>,
     buf: BufWriter<StdoutLock<'static>>,
-    n_enumerated: usize,
-    n_models: usize,
+    n_enumerated: Integer,
+    n_models: Integer,
     compact_display: bool,
     do_not_print: bool,
 }
@@ -158,8 +159,8 @@ impl ModelWriter {
             pattern,
             sign_location,
             buf: BufWriter::with_capacity(128 * 1024, std::io::stdout().lock()),
-            n_enumerated: 0,
-            n_models: 0,
+            n_enumerated: 0.into(),
+            n_models: 0.into(),
             compact_display,
             do_not_print,
         }
@@ -168,10 +169,10 @@ impl ModelWriter {
     fn write_model_ordered(&mut self, model: &[Option<Literal>]) {
         self.n_enumerated += 1;
         if self.do_not_print {
-            self.n_models += 1 << model.iter().filter(|opt| opt.is_none()).count();
+            self.n_models += Integer::from(1) << model.iter().filter(|opt| opt.is_none()).count();
             return;
         }
-        let mut current_n_models = 1;
+        let mut current_n_models = Integer::from(1);
         model
             .iter()
             .zip(self.sign_location.iter())

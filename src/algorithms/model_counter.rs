@@ -121,7 +121,7 @@ fn adapt_for_root(
     path: &[NodeIndex],
 ) -> ModelCountingVisitorData {
     if path.len() == 1 {
-        data.n_models *= 1 << data.involved_vars.count_zeros();
+        data.n_models *= Integer::from(1) << data.involved_vars.count_zeros();
     }
     data
 }

@@ -43,6 +43,15 @@ Use the `model-counting` command:
 decdnnf_rs model-counting -i instance.nnf
 ```
 
+## Enumerate the models of a Decision-DNNF
+
+Use the `model-enumeration` command:
+
+```bash
+decdnnf_rs model-enumeration -i instance.nnf
+```
+This commands admits multiple options allowing to set the number of variables (in case it is higher than the highest index in the input formula), use a compact output or use an enumeration algorithm based on a decision tree. Run `decdnnf_rs model-enumeration -h` for more information.
+
 ## License
 
 Decdnnf-rs is developed at CRIL (Univ. Artois & CNRS).

@@ -15,10 +15,6 @@ impl InvolvedVars {
         Self(bitvec![0; n_vars])
     }
 
-    pub fn new_all_set(n_vars: usize) -> Self {
-        Self(bitvec![1; n_vars])
-    }
-
     pub fn and_assign(&mut self, other: &InvolvedVars) {
         self.0 &= &other.0;
     }
@@ -50,10 +46,6 @@ impl InvolvedVars {
 
     pub fn is_set(&self, l: Literal) -> bool {
         *self.0.get(l.var_index()).unwrap()
-    }
-
-    pub fn len(&self) -> usize {
-        self.0.len()
     }
 
     pub fn count_ones(&self) -> usize {

@@ -1,8 +1,6 @@
 use super::common;
 use crusti_app_helper::{info, App, AppSettings, Arg, SubCommand};
-use decdnnf_rs::{
-    BottomUpTraversal, CheckingVisitor, DecisionDNNF, Literal, ModelEnumerator, ModelFinder,
-};
+use decdnnf_rs::{Literal, ModelEnumerator, ModelFinder};
 use rug::Integer;
 use std::io::{BufWriter, StdoutLock, Write};
 
@@ -59,7 +57,7 @@ impl<'a> crusti_app_helper::Command<'a> for Command {
 }
 
 fn enum_default(arg_matches: &crusti_app_helper::ArgMatches<'_>) -> anyhow::Result<()> {
-    let ddnnf = load_ddnnf(arg_matches)?;
+    let ddnnf = common::read_and_check_input_ddnnf(arg_matches)?;
     let mut model_writer = ModelWriter::new(
         ddnnf.n_vars(),
         arg_matches.is_present(ARG_COMPACT_FREE_VARS),
@@ -75,7 +73,7 @@ fn enum_default(arg_matches: &crusti_app_helper::ArgMatches<'_>) -> anyhow::Resu
 }
 
 fn enum_decision_tree(arg_matches: &crusti_app_helper::ArgMatches<'_>) -> anyhow::Result<()> {
-    let ddnnf = load_ddnnf(arg_matches)?;
+    let ddnnf = common::read_and_check_input_ddnnf(arg_matches)?;
     let mut model_writer = ModelWriter::new(
         ddnnf.n_vars(),
         arg_matches.is_present(ARG_COMPACT_FREE_VARS),
@@ -122,15 +120,6 @@ fn enum_decision_tree(arg_matches: &crusti_app_helper::ArgMatches<'_>) -> anyhow
     }
     model_writer.finalize();
     Ok(())
-}
-
-fn load_ddnnf(arg_matches: &crusti_app_helper::ArgMatches<'_>) -> anyhow::Result<DecisionDNNF> {
-    let ddnnf = common::read_input_ddnnf(arg_matches)?;
-    let traversal_visitor = Box::<CheckingVisitor>::default();
-    let traversal_engine = BottomUpTraversal::new(traversal_visitor);
-    let checking_data = traversal_engine.traverse(&ddnnf);
-    common::print_warnings_and_errors(&checking_data)?;
-    Ok(ddnnf)
 }
 
 struct ModelWriter {

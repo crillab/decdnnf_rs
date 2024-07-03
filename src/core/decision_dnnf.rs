@@ -213,7 +213,7 @@ impl DecisionDNNF {
 macro_rules! index_type {
     ($type_name:ident, $index_name:ident, $vec_index_name:ident) => {
         #[doc = concat!("An index type dedicated to [`", stringify!($type_name), "`] objects.")]
-        #[derive(Copy, Clone, Debug)]
+        #[derive(Copy, Clone, Debug, PartialEq, Eq)]
         pub struct $index_name(usize);
 
         impl From<usize> for $index_name {

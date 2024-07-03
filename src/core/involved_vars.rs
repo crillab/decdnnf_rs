@@ -48,14 +48,6 @@ impl InvolvedVars {
         *self.0.get(l.var_index()).unwrap()
     }
 
-    pub fn count_ones(&self) -> usize {
-        self.0.count_ones()
-    }
-
-    pub fn count_zeros(&self) -> usize {
-        self.0.count_zeros()
-    }
-
     pub fn iter_missing_literals(&self) -> impl Iterator<Item = Literal> + '_ {
         self.0
             .iter_zeros()

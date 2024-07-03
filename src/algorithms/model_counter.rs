@@ -1,5 +1,6 @@
+use super::free_variables;
 use crate::{
-    core::{BottomUpVisitor, InvolvedVars, NodeIndex},
+    core::{EdgeIndex, Node, NodeIndex},
     DecisionDNNF, Literal,
 };
 use rug::Integer;
@@ -7,138 +8,97 @@ use rug::Integer;
 /// A structure used to count the models of a [`DecisionDNNF`].
 ///
 /// The algorithm takes a time polynomial in the size of the Decision-DNNF.
+/// For each node in the formula, the number of models for the subformula rooted at this node is kept and can be queried.
 ///
 /// # Example
 ///
 /// ```
-/// use decdnnf_rs::{BottomUpTraversal, DecisionDNNF, ModelCountingVisitor};
+/// use decdnnf_rs::{DecisionDNNF, ModelCounter};
 ///
-/// fn check_decision_dnnf(ddnnf: &DecisionDNNF) {
-///     let traversal = BottomUpTraversal::new(Box::<ModelCountingVisitor>::default());
-///     let result = traversal.traverse(&ddnnf);
-///     println!("the formula has {} models", result.n_models());
+/// fn count_models(ddnnf: &DecisionDNNF) {
+///     let model_counter = ModelCounter::new(ddnnf);
+///     println!("the formula has {} models", model_counter.n_models());
 /// }
-/// # check_decision_dnnf(&decdnnf_rs::D4Reader::read("t 1 0".as_bytes()).unwrap())
+/// # count_models(&decdnnf_rs::D4Reader::read("t 1 0".as_bytes()).unwrap())
 /// ```
-#[derive(Default)]
-pub struct ModelCountingVisitor;
-
-/// The data returned by the [`ModelCountingVisitor`] algorithm.
-///
-/// See its documentation for more information.
-pub struct ModelCountingVisitorData {
-    n_models: Integer,
-    involved_vars: InvolvedVars,
+pub struct ModelCounter<'a> {
+    ddnnf: &'a DecisionDNNF,
+    n_models: Vec<Option<Integer>>,
+    or_free_vars: Vec<Vec<Vec<Literal>>>,
+    root_free_vars: Vec<Literal>,
 }
 
-impl ModelCountingVisitorData {
-    fn new_for_leaf(n_vars: usize, n_models: usize) -> Self {
-        Self {
-            n_models: Integer::from(n_models),
-            involved_vars: InvolvedVars::new(n_vars),
-        }
-    }
-
-    /// Returns the number of models.
+impl<'a> ModelCounter<'a> {
+    /// Builds a new model counter given a formula.
+    ///
+    /// This function computes the number of models for each subformula rooted at a node of the Decision-DNNF.
     #[must_use]
+    pub fn new(ddnnf: &'a DecisionDNNF) -> Self {
+        let (or_free_vars, root_free_vars) = free_variables::compute(ddnnf);
+        let mut result = Self {
+            ddnnf,
+            n_models: vec![None; ddnnf.nodes().as_slice().len()],
+            or_free_vars,
+            root_free_vars,
+        };
+        result.compute_models_from(NodeIndex::from(0));
+        result
+    }
+
+    fn compute_models_from(&mut self, index: NodeIndex) {
+        if self.n_models[usize::from(index)].is_some() {
+            return;
+        }
+        let edge_indices = match &self.ddnnf.nodes()[index] {
+            Node::And(edge_indices) | Node::Or(edge_indices) => edge_indices.clone(),
+            Node::True | Node::False => vec![],
+        };
+        for e in edge_indices {
+            let target = self.ddnnf.edges()[e].target();
+            self.compute_models_from(target);
+        }
+        let iter_for_children = |c: &'a Vec<EdgeIndex>| {
+            c.iter().map(|e| {
+                self.n_models[usize::from(self.ddnnf.edges()[*e].target())]
+                    .as_ref()
+                    .unwrap()
+            })
+        };
+        let mut n = match &self.ddnnf.nodes()[index] {
+            Node::And(edge_indices) => iter_for_children(edge_indices).product(),
+            Node::Or(edge_indices) => iter_for_children(edge_indices)
+                .zip(self.or_free_vars[usize::from(index)].iter().map(Vec::len))
+                .map(|(n, w)| n.clone() << w)
+                .sum(),
+            Node::True => Integer::ONE.clone(),
+            Node::False => Integer::ZERO,
+        };
+        if index == NodeIndex::from(0) {
+            n <<= self.root_free_vars.len();
+        }
+        self.n_models[usize::from(index)] = Some(n);
+    }
+
+    /// Returns the number of models of the whole formula, including the free variables.
+    #[must_use]
+    #[allow(clippy::missing_panics_doc)]
     pub fn n_models(&self) -> &Integer {
-        &self.n_models
+        self.n_models[0].as_ref().unwrap()
     }
-}
-
-impl BottomUpVisitor<ModelCountingVisitorData> for ModelCountingVisitor {
-    fn merge_for_and(
-        &self,
-        _ddnnf: &DecisionDNNF,
-        path: &[NodeIndex],
-        children: Vec<(&[Literal], ModelCountingVisitorData)>,
-    ) -> ModelCountingVisitorData {
-        adapt_for_root(
-            merge_children(children, &|v0, v1| {
-                v0.n_models.clone() * v1.n_models.clone()
-            }),
-            path,
-        )
-    }
-
-    fn merge_for_or(
-        &self,
-        _ddnnf: &DecisionDNNF,
-        path: &[NodeIndex],
-        children: Vec<(&[Literal], ModelCountingVisitorData)>,
-    ) -> ModelCountingVisitorData {
-        adapt_for_root(
-            merge_children(children, &|v0, v1| {
-                let mut intersection = v0.involved_vars.clone();
-                intersection.and_assign(&v1.involved_vars);
-                let intersection_ones = intersection.count_ones();
-                v0.n_models.clone() * (1 << (v1.involved_vars.count_ones() - intersection_ones))
-                    + v1.n_models.clone()
-                        * (1 << (v0.involved_vars.count_ones() - intersection_ones))
-            }),
-            path,
-        )
-    }
-
-    fn new_for_true(&self, ddnnf: &DecisionDNNF, path: &[NodeIndex]) -> ModelCountingVisitorData {
-        adapt_for_root(
-            ModelCountingVisitorData::new_for_leaf(ddnnf.n_vars(), 1),
-            path,
-        )
-    }
-
-    fn new_for_false(&self, ddnnf: &DecisionDNNF, path: &[NodeIndex]) -> ModelCountingVisitorData {
-        adapt_for_root(
-            ModelCountingVisitorData::new_for_leaf(ddnnf.n_vars(), 0),
-            path,
-        )
-    }
-}
-
-fn merge_children(
-    children: Vec<(&[Literal], ModelCountingVisitorData)>,
-    n_models_fn: &dyn Fn(&ModelCountingVisitorData, &ModelCountingVisitorData) -> Integer,
-) -> ModelCountingVisitorData {
-    let new_children = children
-        .into_iter()
-        .map(|(propagated, mut child)| {
-            child.involved_vars.set_literals(propagated);
-            child
-        })
-        .collect::<Vec<_>>();
-    new_children
-        .into_iter()
-        .reduce(|mut acc, to_merge| {
-            acc.n_models = n_models_fn(&acc, &to_merge);
-            acc.involved_vars.or_assign(&to_merge.involved_vars);
-            acc
-        })
-        .expect("cannot merge an empty set of children")
-}
-
-fn adapt_for_root(
-    mut data: ModelCountingVisitorData,
-    path: &[NodeIndex],
-) -> ModelCountingVisitorData {
-    if path.len() == 1 {
-        data.n_models *= Integer::from(1) << data.involved_vars.count_zeros();
-    }
-    data
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{core::BottomUpTraversal, D4Reader};
+    use crate::D4Reader;
 
     fn model_count(instance: &str, n_vars: Option<usize>) -> usize {
         let mut ddnnf = D4Reader::read(instance.as_bytes()).unwrap();
         if let Some(n) = n_vars {
             ddnnf.update_n_vars(n);
         }
-        let traversal = BottomUpTraversal::new(Box::<ModelCountingVisitor>::default());
-        let result = traversal.traverse(&ddnnf);
-        result.n_models.to_usize_wrapping()
+        let model_counter = ModelCounter::new(&ddnnf);
+        model_counter.n_models().to_usize_wrapping()
     }
 
     #[test]

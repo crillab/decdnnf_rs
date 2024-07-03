@@ -1,6 +1,6 @@
 use super::common;
 use crusti_app_helper::{App, AppSettings, SubCommand};
-use decdnnf_rs::{BiBottomUpVisitor, BottomUpTraversal, CheckingVisitor, ModelCountingVisitor};
+use decdnnf_rs::ModelCounter;
 
 #[derive(Default)]
 pub struct Command;
@@ -22,15 +22,9 @@ impl<'a> crusti_app_helper::Command<'a> for Command {
     }
 
     fn execute(&self, arg_matches: &crusti_app_helper::ArgMatches<'_>) -> anyhow::Result<()> {
-        let ddnnf = common::read_input_ddnnf(arg_matches)?;
-        let traversal_visitor = BiBottomUpVisitor::new(
-            Box::<CheckingVisitor>::default(),
-            Box::<ModelCountingVisitor>::default(),
-        );
-        let traversal_engine = BottomUpTraversal::new(Box::new(traversal_visitor));
-        let (checking_data, model_counting_data) = traversal_engine.traverse(&ddnnf);
-        common::print_warnings_and_errors(&checking_data)?;
-        println!("{}", model_counting_data.n_models());
+        let ddnnf = common::read_and_check_input_ddnnf(arg_matches)?;
+        let model_counter = ModelCounter::new(&ddnnf);
+        println!("{}", model_counter.n_models());
         Ok(())
     }
 }

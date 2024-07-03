@@ -1,5 +1,6 @@
+use super::free_variables;
 use crate::{
-    core::{EdgeIndex, InvolvedVars, Node, NodeIndex},
+    core::{EdgeIndex, Node, NodeIndex},
     DecisionDNNF, Literal,
 };
 
@@ -98,80 +99,19 @@ impl<'a> ModelEnumerator<'a> {
     #[allow(clippy::missing_panics_doc)]
     pub fn new(ddnnf: &'a DecisionDNNF, elude_free_vars: bool) -> Self {
         let n_nodes = ddnnf.nodes().as_slice().len();
+        let (or_free_vars, root_free_vars) = free_variables::compute(ddnnf);
+        let mut model = vec![None; ddnnf.n_vars()];
+        Self::update_model_with_propagations(&mut model, &root_free_vars, elude_free_vars);
         Self {
             ddnnf,
             or_edge_indices: vec![0; n_nodes],
-            or_free_vars: vec![vec![]; n_nodes],
-            root_free_vars: vec![],
+            or_free_vars,
+            root_free_vars,
             first_computed: false,
-            model: vec![None; ddnnf.n_vars()],
+            model,
             has_model: true,
             elude_free_vars,
         }
-    }
-
-    fn compute_free_vars(&mut self) {
-        let mut involved_vars = vec![None; self.or_free_vars.len()];
-        self.compute_free_vars_from(NodeIndex::from(0), &mut involved_vars);
-        let root_free_vars = involved_vars[0]
-            .as_ref()
-            .unwrap()
-            .iter_missing_literals()
-            .collect::<Vec<_>>();
-        Self::update_model_with_propagations(
-            &mut self.model,
-            &root_free_vars,
-            self.elude_free_vars,
-        );
-        self.root_free_vars = root_free_vars;
-    }
-
-    fn compute_free_vars_from(
-        &mut self,
-        from: NodeIndex,
-        involved_vars: &mut [Option<InvolvedVars>],
-    ) {
-        if involved_vars[usize::from(from)].is_some() {
-            return;
-        }
-        involved_vars[usize::from(from)] = Some(self.compute_involved_vars(from, involved_vars));
-        if let Node::Or(edges) = &self.ddnnf.nodes()[from] {
-            for edge_index in edges {
-                let edge = &self.ddnnf.edges()[*edge_index];
-                let target = edge.target();
-                let mut involved_in_child =
-                    involved_vars[usize::from(target)].as_ref().unwrap().clone();
-                for l in edge.propagated() {
-                    involved_in_child.set_literal(*l);
-                }
-                involved_in_child.xor_assign(involved_vars[usize::from(from)].as_ref().unwrap());
-                self.or_free_vars[usize::from(from)]
-                    .push(involved_in_child.iter_pos_literals().collect());
-            }
-        }
-    }
-
-    fn compute_involved_vars(
-        &mut self,
-        node: NodeIndex,
-        involved_vars: &mut [Option<InvolvedVars>],
-    ) -> InvolvedVars {
-        let mut union = InvolvedVars::new(self.ddnnf.n_vars());
-        match &self.ddnnf.nodes()[node] {
-            Node::And(edges) | Node::Or(edges) => {
-                for edge_index in edges {
-                    let edge = &self.ddnnf.edges()[*edge_index];
-                    let target = edge.target();
-                    self.compute_free_vars_from(target, involved_vars);
-                    union.or_assign(involved_vars[usize::from(target)].as_ref().unwrap());
-                    for l in edge.propagated() {
-                        union.set_literal(*l);
-                    }
-                }
-            }
-            Node::True | Node::False => {}
-        }
-        union
     }
 
     /// Computes the next model and returns it.
@@ -198,7 +138,6 @@ impl<'a> ModelEnumerator<'a> {
 
     fn compute_first_model(&mut self) -> Option<&[Option<Literal>]> {
         self.first_computed = true;
-        self.compute_free_vars();
         if self.first_path_from(NodeIndex::from(0)) {
             self.has_model = true;
             Some(&self.model)

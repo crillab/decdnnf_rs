@@ -1,6 +1,8 @@
 use anyhow::{anyhow, Context, Result};
 use crusti_app_helper::{info, warn, Arg, ArgMatches};
-use decdnnf_rs::{CheckingVisitorData, D4Reader, DecisionDNNF, Literal};
+use decdnnf_rs::{
+    BottomUpTraversal, CheckingVisitor, CheckingVisitorData, D4Reader, DecisionDNNF, Literal,
+};
 use std::{
     fs::{self, File},
     io::BufReader,
@@ -73,4 +75,15 @@ pub(crate) fn print_warnings_and_errors(checking_data: &CheckingVisitorData) -> 
     } else {
         Ok(())
     }
+}
+
+pub fn read_and_check_input_ddnnf(
+    arg_matches: &crusti_app_helper::ArgMatches<'_>,
+) -> anyhow::Result<DecisionDNNF> {
+    let ddnnf = read_input_ddnnf(arg_matches)?;
+    let traversal_visitor = Box::<CheckingVisitor>::default();
+    let traversal_engine = BottomUpTraversal::new(traversal_visitor);
+    let checking_data = traversal_engine.traverse(&ddnnf);
+    print_warnings_and_errors(&checking_data)?;
+    Ok(ddnnf)
 }

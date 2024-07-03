@@ -1,4 +1,4 @@
-//! A library used to handle Decision-DNNF formulas.
+#![doc = include_str!("../README.md")]
 
 mod algorithms;
 pub use algorithms::CheckingVisitor;

@@ -2,6 +2,9 @@ mod checker;
 pub use checker::CheckingVisitor;
 pub use checker::CheckingVisitorData;
 
+mod direct_access;
+pub use direct_access::DirectAccessEngine;
+
 mod free_variables;
 
 mod model_counter;

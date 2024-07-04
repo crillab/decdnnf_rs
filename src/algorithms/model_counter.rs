@@ -85,6 +85,24 @@ impl<'a> ModelCounter<'a> {
     pub fn n_models(&self) -> &Integer {
         self.n_models[0].as_ref().unwrap()
     }
+
+    pub(crate) fn n_models_from(&self, index: NodeIndex) -> &Integer {
+        self.n_models[usize::from(index)].as_ref().unwrap()
+    }
+
+    /// Returns the [`DecisionDNNF`] which models are counted.
+    #[must_use]
+    pub fn ddnnf(&self) -> &DecisionDNNF {
+        self.ddnnf
+    }
+
+    pub(crate) fn root_free_vars(&self) -> &[Literal] {
+        &self.root_free_vars
+    }
+
+    pub(crate) fn or_free_vars(&self) -> &[Vec<Vec<Literal>>] {
+        &self.or_free_vars
+    }
 }
 
 #[cfg(test)]

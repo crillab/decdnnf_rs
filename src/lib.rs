@@ -3,6 +3,7 @@
 mod algorithms;
 pub use algorithms::CheckingVisitor;
 pub use algorithms::CheckingVisitorData;
+pub use algorithms::DirectAccessEngine;
 pub use algorithms::ModelCounter;
 pub use algorithms::ModelEnumerator;
 pub use algorithms::ModelFinder;

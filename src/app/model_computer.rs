@@ -1,6 +1,6 @@
 use super::common;
 use crusti_app_helper::{App, AppSettings, Arg, SubCommand};
-use decdnnf_rs::{BottomUpTraversal, CheckingVisitor, Literal, ModelFinder};
+use decdnnf_rs::{Literal, ModelFinder};
 
 #[derive(Default)]
 pub struct Command;
@@ -33,11 +33,7 @@ impl<'a> crusti_app_helper::Command<'a> for Command {
     }
 
     fn execute(&self, arg_matches: &crusti_app_helper::ArgMatches<'_>) -> anyhow::Result<()> {
-        let ddnnf = common::read_input_ddnnf(arg_matches)?;
-        let traversal_visitor = Box::<CheckingVisitor>::default();
-        let traversal_engine = BottomUpTraversal::new(traversal_visitor);
-        let checking_data = traversal_engine.traverse(&ddnnf);
-        common::print_warnings_and_errors(&checking_data)?;
+        let ddnnf = common::read_and_check_input_ddnnf(arg_matches)?;
         let assumptions = if let Some(str_assumptions) = arg_matches.value_of(ARG_ASSUMPTIONS) {
             str_assumptions
                 .split_whitespace()

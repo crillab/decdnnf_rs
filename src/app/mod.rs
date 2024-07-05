@@ -11,5 +11,8 @@ pub(crate) use model_enumeration::Command as ModelEnumerationCommand;
 
 mod model_writer;
 
+mod sampling;
+pub(crate) use sampling::Command as SamplingCommand;
+
 mod translation;
 pub(crate) use translation::Command as TranslationCommand;

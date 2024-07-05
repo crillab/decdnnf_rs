@@ -1,0 +1,84 @@
+use super::common;
+use crate::app::model_writer::ModelWriter;
+use anyhow::Context;
+use crusti_app_helper::{info, App, AppSettings, Arg, SubCommand};
+use decdnnf_rs::{DirectAccessEngine, ModelCounter};
+use rug::{rand::RandState, Integer};
+use rustc_hash::FxHashMap;
+use std::str::FromStr;
+
+#[derive(Default)]
+pub struct Command;
+
+const CMD_NAME: &str = "sampling";
+
+const ARG_LIMIT: &str = "ARG_LIMIT";
+const ARG_DO_NOT_PRINT: &str = "ARG_DO_NOT_PRINT";
+
+impl<'a> crusti_app_helper::Command<'a> for Command {
+    fn name(&self) -> &str {
+        CMD_NAME
+    }
+
+    fn clap_subcommand(&self) -> App<'a, 'a> {
+        SubCommand::with_name(CMD_NAME)
+            .about("performs a uniform sampling among the models of the formula")
+            .setting(AppSettings::DisableVersion)
+            .arg(common::arg_input_var())
+            .arg(common::arg_n_vars())
+            .arg(crusti_app_helper::logging_level_cli_arg())
+            .arg(
+                Arg::with_name(ARG_LIMIT)
+                    .short("l")
+                    .long("limit")
+                    .empty_values(false)
+                    .multiple(false)
+                    .help("sets the maximal number of models to print"),
+            )
+            .arg(
+                Arg::with_name(ARG_DO_NOT_PRINT)
+                    .long("do-not-print")
+                    .takes_value(false)
+                    .help("do not print the models (for testing purpose)"),
+            )
+    }
+
+    fn execute(&self, arg_matches: &crusti_app_helper::ArgMatches<'_>) -> anyhow::Result<()> {
+        let ddnnf = common::read_and_check_input_ddnnf(arg_matches)?;
+        let model_counter = ModelCounter::new(&ddnnf);
+        let n_models = model_counter.n_models();
+        info!("formula has {n_models} models");
+        let mut n_samples = model_counter.n_models().clone();
+        if let Some(str_n) = arg_matches.value_of(ARG_LIMIT) {
+            let n = Integer::from_str(str_n)
+                .context("while parsing the maximal number of models to print")?;
+            if n_samples > n {
+                n_samples = n;
+            }
+        }
+        info!("sampling {n_samples} samples");
+        let mut engine = DirectAccessEngine::new(&model_counter);
+        let mut counter = Integer::ZERO;
+        let mut swapped: FxHashMap<Integer, Integer> = FxHashMap::default();
+        let mut rand = RandState::new_mersenne_twister();
+        let mut model_writer = ModelWriter::new(
+            ddnnf.n_vars(),
+            false,
+            arg_matches.is_present(ARG_DO_NOT_PRINT),
+        );
+        while counter < n_samples {
+            let mut bound = Integer::from(n_models - &counter);
+            let rand_index = Integer::from(bound.random_below_ref(&mut rand));
+            bound -= 1;
+            let last_value = swapped.get(&bound).unwrap_or(&bound).to_owned();
+            let rand_value = swapped
+                .insert(rand_index, last_value)
+                .unwrap_or_else(|| Integer::from(bound.random_below_ref(&mut rand)));
+            let model = engine.model(rand_value).unwrap();
+            model_writer.write_model_no_opt(&model);
+            counter += 1;
+        }
+        model_writer.finalize();
+        Ok(())
+    }
+}

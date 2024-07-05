@@ -43,9 +43,9 @@ impl<'a> DirectAccessEngine<'a> {
                         .iter()
                         .for_each(|p| model[p.var_index()] = *p);
                     let target = edge.target();
-                    let child_n_models = self.model_counter.n_models_from(target);
-                    self.build_model_from(model, n.clone() % child_n_models, target);
-                    n /= child_n_models;
+                    let mut child_n_models = self.model_counter.n_models_from(target).to_owned();
+                    n.div_rem_mut(&mut child_n_models);
+                    self.build_model_from(model, child_n_models, target);
                 }
             }
             Node::Or(edges) => {
@@ -54,8 +54,8 @@ impl<'a> DirectAccessEngine<'a> {
                     let edge = &self.model_counter.ddnnf().edges()[*edge];
                     let target = edge.target();
                     let child_n_models = self.model_counter.n_models_from(target);
-                    let free_vars_n_models = Integer::ONE.clone() << free_vars[i].len();
-                    if n < child_n_models * free_vars_n_models.clone() {
+                    let total_child_n_models = Integer::from(child_n_models << free_vars[i].len());
+                    if n < total_child_n_models {
                         update_model_with_free_vars(model, &mut n, &free_vars[i]);
                         edge.propagated()
                             .iter()
@@ -63,7 +63,7 @@ impl<'a> DirectAccessEngine<'a> {
                         self.build_model_from(model, n, target);
                         return;
                     }
-                    n -= child_n_models * free_vars_n_models;
+                    n -= total_child_n_models;
                 }
             }
             Node::True => {}
@@ -73,14 +73,15 @@ impl<'a> DirectAccessEngine<'a> {
 }
 
 fn update_model_with_free_vars(model: &mut [Literal], n: &mut Integer, free_vars: &[Literal]) {
-    for v in free_vars {
-        if n.get_bit(0) {
+    for (i, v) in free_vars.iter().enumerate() {
+        #[allow(clippy::cast_possible_truncation)]
+        if n.get_bit(i as u32) {
             model[v.var_index()] = *v;
         } else {
             model[v.var_index()] = v.flip();
         }
-        *n >>= 1;
     }
+    *n >>= free_vars.len();
 }
 
 #[cfg(test)]

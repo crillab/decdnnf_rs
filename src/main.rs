@@ -3,7 +3,8 @@
 mod app;
 
 use app::{
-    ModelComputerCommand, ModelCountingCommand, ModelEnumerationCommand, TranslationCommand,
+    ModelComputerCommand, ModelCountingCommand, ModelEnumerationCommand, SamplingCommand,
+    TranslationCommand,
 };
 use crusti_app_helper::{AppHelper, Command};
 
@@ -21,6 +22,7 @@ pub(crate) fn create_app_helper() -> AppHelper<'static> {
         Box::<ModelComputerCommand>::default(),
         Box::<ModelCountingCommand>::default(),
         Box::<ModelEnumerationCommand>::default(),
+        Box::<SamplingCommand>::default(),
         Box::<TranslationCommand>::default(),
     ];
     for c in commands {

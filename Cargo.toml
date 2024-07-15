@@ -6,6 +6,7 @@ version = "0.1.0"
 description = "A library for Decision-DNNFs."
 categories = ["command-line-utilities", "science"]
 keywords = ["decision", "DNNF", "model", "counting", "enumeration"]
+homepage = "https://www.cril.univ-artois.fr/software/decdnnf-rs/"
 repository = "https://github.com/crillab/decdnnf_rs"
 rust-version = "1.72.1"
 edition = "2021"

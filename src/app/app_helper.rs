@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use crate::cli_manager::{cli_manager::CliManager, command::Command};
+use crate::app::{cli_manager::CliManager, command::Command};
 use anyhow::Result;
 use log::{error, info};
 use std::{ffi::OsString, sync::Once, time::SystemTime};
@@ -76,7 +76,7 @@ impl<'a> AppHelper<'a> {
     ///
     /// This function consumes the helper.
     pub fn launch_app(self) {
-        self.launch_app_with_args(std::env::args_os())
+        self.launch_app_with_args(std::env::args_os());
     }
 
     /// Launch the application.
@@ -120,7 +120,7 @@ impl<'a> AppHelper<'a> {
 }
 
 pub fn init_logger() {
-    init_logger_with_level(log::LevelFilter::Info)
+    init_logger_with_level(log::LevelFilter::Info);
 }
 
 pub fn init_logger_with_level(level: log::LevelFilter) {
@@ -133,7 +133,7 @@ pub fn init_logger_with_level(level: log::LevelFilter) {
                     colors.color(record.level()),
                     chrono::Local::now().format("[%Y-%m-%d %H:%M:%S]"),
                     message
-                ))
+                ));
             })
             .level(level)
             .chain(std::io::stdout())

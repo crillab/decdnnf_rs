@@ -34,6 +34,10 @@ debug = true
 [dependencies]
 anyhow = "1.0"
 bitvec = "1.0"
-crusti_app_helper = {path = "local_crates/crusti_app_helper-v0.1"}
+chrono = "0.4.19"
+clap = "2.33.3"
+fern = { version = "0.6.0", features = ["colored"] }
+log = "0.4.20"
 rug = "1.22"
 rustc-hash = "1.1"
+sysinfo = "0.30"

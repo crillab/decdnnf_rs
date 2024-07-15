@@ -60,7 +60,7 @@ mod tests {
         write!(s, "abc").unwrap();
         write!(s, "def").unwrap();
         s.flush().unwrap();
-        assert_eq!("abcdef", s.to_string())
+        assert_eq!("abcdef", s.to_string());
     }
 
     #[test]
@@ -69,6 +69,6 @@ mod tests {
         write!(s, "abc").unwrap();
         write!(s, "def").unwrap();
         s.flush().unwrap();
-        assert_eq!("abcdef", format!("{:?}", s))
+        assert_eq!("abcdef", format!("{s:?}"));
     }
 }

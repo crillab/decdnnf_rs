@@ -1,5 +1,5 @@
-use super::common;
-use crusti_app_helper::{App, AppSettings, SubCommand};
+use super::{cli_manager, common};
+use clap::{App, AppSettings, ArgMatches, SubCommand};
 use decdnnf_rs::{BiBottomUpVisitor, BottomUpTraversal, CheckingVisitor, ModelCountingVisitor};
 
 #[derive(Default)]
@@ -7,7 +7,7 @@ pub struct Command;
 
 const CMD_NAME: &str = "model-counting";
 
-impl<'a> crusti_app_helper::Command<'a> for Command {
+impl<'a> super::command::Command<'a> for Command {
     fn name(&self) -> &str {
         CMD_NAME
     }
@@ -18,10 +18,10 @@ impl<'a> crusti_app_helper::Command<'a> for Command {
             .setting(AppSettings::DisableVersion)
             .arg(common::arg_input_var())
             .arg(common::arg_n_vars())
-            .arg(crusti_app_helper::logging_level_cli_arg())
+            .arg(cli_manager::logging_level_cli_arg())
     }
 
-    fn execute(&self, arg_matches: &crusti_app_helper::ArgMatches<'_>) -> anyhow::Result<()> {
+    fn execute(&self, arg_matches: &ArgMatches<'_>) -> anyhow::Result<()> {
         let ddnnf = common::read_input_ddnnf(arg_matches)?;
         let traversal_visitor = BiBottomUpVisitor::new(
             Box::<CheckingVisitor>::default(),

@@ -3,9 +3,9 @@
 mod app;
 
 use app::{
-    ModelComputerCommand, ModelCountingCommand, ModelEnumerationCommand, TranslationCommand,
+    app_helper::AppHelper, command::Command, ModelComputerCommand, ModelCountingCommand,
+    ModelEnumerationCommand, TranslationCommand,
 };
-use crusti_app_helper::{AppHelper, Command};
 
 pub(crate) fn create_app_helper() -> AppHelper<'static> {
     let app_name = option_env!("CARGO_PKG_NAME").unwrap_or("unknown app name");

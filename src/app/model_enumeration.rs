@@ -1,8 +1,9 @@
-use super::common;
-use crusti_app_helper::{info, App, AppSettings, Arg, SubCommand};
+use super::{cli_manager, common};
+use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 use decdnnf_rs::{
     BottomUpTraversal, CheckingVisitor, DecisionDNNF, Literal, ModelEnumerator, ModelFinder,
 };
+use log::info;
 use rug::Integer;
 use std::io::{BufWriter, StdoutLock, Write};
 
@@ -15,7 +16,7 @@ const ARG_COMPACT_FREE_VARS: &str = "ARG_COMPACT_FREE_VARS";
 const ARG_DECISION_TREE: &str = "ARG_DECISION_TREE";
 const ARG_DO_NOT_PRINT: &str = "ARG_DO_NOT_PRINT";
 
-impl<'a> crusti_app_helper::Command<'a> for Command {
+impl<'a> super::command::Command<'a> for Command {
     fn name(&self) -> &str {
         CMD_NAME
     }
@@ -26,7 +27,7 @@ impl<'a> crusti_app_helper::Command<'a> for Command {
             .setting(AppSettings::DisableVersion)
             .arg(common::arg_input_var())
             .arg(common::arg_n_vars())
-            .arg(crusti_app_helper::logging_level_cli_arg())
+            .arg(cli_manager::logging_level_cli_arg())
             .arg(
                 Arg::with_name(ARG_COMPACT_FREE_VARS)
                     .short("c")
@@ -49,7 +50,7 @@ impl<'a> crusti_app_helper::Command<'a> for Command {
             )
     }
 
-    fn execute(&self, arg_matches: &crusti_app_helper::ArgMatches<'_>) -> anyhow::Result<()> {
+    fn execute(&self, arg_matches: &ArgMatches<'_>) -> anyhow::Result<()> {
         if arg_matches.is_present(ARG_DECISION_TREE) {
             enum_decision_tree(arg_matches)
         } else {
@@ -58,7 +59,7 @@ impl<'a> crusti_app_helper::Command<'a> for Command {
     }
 }
 
-fn enum_default(arg_matches: &crusti_app_helper::ArgMatches<'_>) -> anyhow::Result<()> {
+fn enum_default(arg_matches: &ArgMatches<'_>) -> anyhow::Result<()> {
     let ddnnf = load_ddnnf(arg_matches)?;
     let mut model_writer = ModelWriter::new(
         ddnnf.n_vars(),
@@ -74,7 +75,7 @@ fn enum_default(arg_matches: &crusti_app_helper::ArgMatches<'_>) -> anyhow::Resu
     Ok(())
 }
 
-fn enum_decision_tree(arg_matches: &crusti_app_helper::ArgMatches<'_>) -> anyhow::Result<()> {
+fn enum_decision_tree(arg_matches: &ArgMatches<'_>) -> anyhow::Result<()> {
     let ddnnf = load_ddnnf(arg_matches)?;
     let mut model_writer = ModelWriter::new(
         ddnnf.n_vars(),
@@ -124,7 +125,7 @@ fn enum_decision_tree(arg_matches: &crusti_app_helper::ArgMatches<'_>) -> anyhow
     Ok(())
 }
 
-fn load_ddnnf(arg_matches: &crusti_app_helper::ArgMatches<'_>) -> anyhow::Result<DecisionDNNF> {
+fn load_ddnnf(arg_matches: &ArgMatches<'_>) -> anyhow::Result<DecisionDNNF> {
     let ddnnf = common::read_input_ddnnf(arg_matches)?;
     let traversal_visitor = Box::<CheckingVisitor>::default();
     let traversal_engine = BottomUpTraversal::new(traversal_visitor);

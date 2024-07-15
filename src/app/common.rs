@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Context, Result};
-use crusti_app_helper::{info, warn, Arg, ArgMatches};
+use clap::{Arg, ArgMatches};
 use decdnnf_rs::{CheckingVisitorData, D4Reader, DecisionDNNF, Literal};
+use log::{info, warn};
 use std::{
     fs::{self, File},
     io::BufReader,
@@ -31,9 +32,7 @@ pub(crate) fn arg_n_vars<'a>() -> Arg<'a, 'a> {
         )
 }
 
-pub(crate) fn read_input_ddnnf(
-    arg_matches: &crusti_app_helper::ArgMatches<'_>,
-) -> Result<DecisionDNNF> {
+pub(crate) fn read_input_ddnnf(arg_matches: &ArgMatches<'_>) -> Result<DecisionDNNF> {
     let file_reader = create_input_file_reader(arg_matches)?;
     let mut ddnnf = D4Reader::read(file_reader).context("while parsing the input Decision-DNNF")?;
     if let Some(str_n) = arg_matches.value_of(ARG_N_VARS) {

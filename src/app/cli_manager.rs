@@ -15,12 +15,12 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 use super::{command::Command, writable_string::WritableString};
-use crate::{init_logger, app_helper::app_helper::init_logger_with_level};
+use crate::app::app_helper;
 use anyhow::{anyhow, Result};
 use clap::{App, AppSettings, Arg};
 use log::info;
 use std::{ffi::OsString, str::FromStr};
-use sysinfo::{ProcessorExt, System, SystemExt};
+use sysinfo::System;
 
 /// A structure used to handle the set of commands and to process the CLI arguments against them.
 pub(crate) struct CliManager<'a> {
@@ -71,7 +71,7 @@ impl<'a> CliManager<'a> {
             .version(self.version)
             .author(self.author)
             .about(self.about);
-        for c in self.commands.iter() {
+        for c in &self.commands {
             app = app.subcommand(c.clap_subcommand());
         }
         let matches_result = app
@@ -79,7 +79,7 @@ impl<'a> CliManager<'a> {
             .get_matches_from_safe(&mut args.clone().into_iter());
         match matches_result {
             Ok(matches) => {
-                for c in self.commands.iter() {
+                for c in &self.commands {
                     if let Some(matches) = matches.subcommand_matches(c.name()) {
                         let log_level = if let Some(str_log_level) =
                             matches.value_of(APP_HELPER_LOGGING_LEVEL_ARG)
@@ -88,7 +88,7 @@ impl<'a> CliManager<'a> {
                         } else {
                             log::LevelFilter::Info
                         };
-                        init_logger_with_level(log_level);
+                        app_helper::init_logger_with_level(log_level);
                         info!("{} {}", self.app_name, self.version);
                         sys_info();
                         return c.execute(matches);
@@ -100,12 +100,12 @@ impl<'a> CliManager<'a> {
                 kind: clap::ErrorKind::HelpDisplayed,
                 ..
             }) => {
-                init_logger();
+                app_helper::init_logger();
                 self.print_help(&mut app, args.as_slice());
                 Ok(())
             }
             Err(e) => {
-                init_logger();
+                app_helper::init_logger();
                 info!("{} {}", self.app_name, self.version);
                 Err(anyhow!("{}", e))
             }
@@ -117,30 +117,30 @@ impl<'a> CliManager<'a> {
         T: Into<OsString> + Clone,
     {
         const HELP_STRINGS: [&str; 3] = ["help", "-h", "--help"];
-        fn print_message(message: WritableString) {
+        fn print_message(message: &WritableString) {
             message.to_string().split('\n').for_each(|s| info!("{}", s));
             info!("");
         }
         fn search_subcommand(commands: &[Box<dyn Command>], subcommand_arg: &str) -> bool {
-            for c in commands.iter() {
+            for c in commands {
                 if c.name() == subcommand_arg {
                     let mut message = WritableString::default();
                     c.clap_subcommand().write_long_help(&mut message).unwrap();
-                    print_message(message);
+                    print_message(&message);
                     return true;
                 }
             }
             panic!("unreachable") // kcov-ignore
         }
         if args.len() >= 2 {
-            let arg1 = args[1].clone().into().into_string().unwrap();
-            if !HELP_STRINGS.contains(&arg1.as_ref() as &&str)
-                && search_subcommand(&self.commands, &arg1)
+            let second_arg = args[1].clone().into().into_string().unwrap();
+            if !HELP_STRINGS.contains(&second_arg.as_ref() as &&str)
+                && search_subcommand(&self.commands, &second_arg)
             {
                 return;
             }
             if args.len() >= 3
-                && HELP_STRINGS.contains(&arg1.as_ref() as &&str)
+                && HELP_STRINGS.contains(&second_arg.as_ref() as &&str)
                 && search_subcommand(
                     &self.commands,
                     args[2].clone().into().into_string().as_ref().unwrap(),
@@ -151,7 +151,7 @@ impl<'a> CliManager<'a> {
         }
         let mut message = WritableString::default();
         app.write_long_help(&mut message).unwrap();
-        print_message(message);
+        print_message(&message);
     }
 }
 
@@ -159,15 +159,15 @@ fn sys_info() {
     info!("----------------------------------------");
     let sys = System::new_all();
     let unknown = || "[unknown]".to_string();
-    info!("running on {}", sys.host_name().unwrap_or_else(unknown));
+    info!("running on {}", System::host_name().unwrap_or_else(unknown));
     info!(
         "OS is {} {} with kernel {}",
-        sys.name().unwrap_or_else(unknown),
-        sys.os_version().unwrap_or_else(unknown),
-        sys.kernel_version().unwrap_or_else(unknown)
+        System::name().unwrap_or_else(unknown),
+        System::os_version().unwrap_or_else(unknown),
+        System::kernel_version().unwrap_or_else(unknown)
     );
-    let mut processor_kinds: Vec<&str> = sys.processors().iter().map(|p| p.brand()).collect();
-    processor_kinds.sort();
+    let mut processor_kinds: Vec<&str> = sys.cpus().iter().map(sysinfo::Cpu::brand).collect();
+    processor_kinds.sort_unstable();
     processor_kinds.dedup();
     info!(
         "physical core count: {} {:?}",
@@ -219,9 +219,9 @@ mod tests {
         }
     }
 
-    fn test_local_command_result(
-        args: Vec<&'static str>,
-    ) -> Result<(Rc<RefCell<bool>>, Rc<RefCell<bool>>)> {
+    type LocalCmdResult = Result<(Rc<RefCell<bool>>, Rc<RefCell<bool>>)>;
+
+    fn test_local_command_result(args: Vec<&'static str>) -> LocalCmdResult {
         let mut manager = CliManager::new("app_name", "app_version", "author", "about");
         let command_involved = Rc::new(RefCell::new(false));
         let argument_set = Rc::new(RefCell::new(false));

@@ -1,19 +1,47 @@
 use decdnnf_rs::Literal;
 use rug::Integer;
-use std::io::{BufWriter, StdoutLock, Write};
+use std::io::{BufWriter, Stdout, StdoutLock, Write};
 
-pub(crate) struct ModelWriter {
+pub(crate) struct ModelWriter<W>
+where
+    W: Write,
+{
     pattern: Vec<u8>,
     sign_location: Vec<usize>,
-    buf: BufWriter<StdoutLock<'static>>,
+    buf: BufWriter<W>,
     n_enumerated: Integer,
     n_models: Integer,
     compact_display: bool,
     do_not_print: bool,
 }
 
-impl ModelWriter {
-    pub fn new(n_vars: usize, compact_display: bool, do_not_print: bool) -> Self {
+impl ModelWriter<StdoutLock<'static>> {
+    pub fn new_locked(n_vars: usize, compact_display: bool, do_not_print: bool) -> Self {
+        ModelWriter::new(
+            n_vars,
+            compact_display,
+            do_not_print,
+            BufWriter::with_capacity(128 * 1024, std::io::stdout().lock()),
+        )
+    }
+}
+
+impl ModelWriter<Stdout> {
+    pub fn new_unlocked(n_vars: usize, compact_display: bool, do_not_print: bool) -> Self {
+        ModelWriter::new(
+            n_vars,
+            compact_display,
+            do_not_print,
+            BufWriter::with_capacity(128 * 1024, std::io::stdout()),
+        )
+    }
+}
+
+impl<W> ModelWriter<W>
+where
+    W: Write,
+{
+    fn new(n_vars: usize, compact_display: bool, do_not_print: bool, buf: BufWriter<W>) -> Self {
         let mut sign_location = Vec::with_capacity(n_vars);
         let mut pattern = Vec::new();
         pattern.push(b'v');
@@ -27,7 +55,7 @@ impl ModelWriter {
         Self {
             pattern,
             sign_location,
-            buf: BufWriter::with_capacity(128 * 1024, std::io::stdout().lock()),
+            buf,
             n_enumerated: 0.into(),
             n_models: 0.into(),
             compact_display,
@@ -38,7 +66,8 @@ impl ModelWriter {
     pub fn write_model_ordered(&mut self, model: &[Option<Literal>]) {
         self.n_enumerated += 1;
         if self.do_not_print {
-            self.n_models += Integer::from(1) << model.iter().filter(|opt| opt.is_none()).count();
+            self.n_models +=
+                Integer::from(Integer::ONE << model.iter().filter(|opt| opt.is_none()).count());
             return;
         }
         let mut current_n_models = Integer::from(1);

@@ -1,8 +1,9 @@
-use super::free_variables;
+use super::{free_variables, DirectAccessEngine};
 use crate::{
     core::{EdgeIndex, Node, NodeIndex},
     DecisionDNNF, Literal,
 };
+use rug::Integer;
 
 /// A structure used to enumerate the models of a [`DecisionDNNF`].
 ///
@@ -78,7 +79,7 @@ use crate::{
 /// }
 /// assert_eq!(vec![vec![2]], models);
 /// ```
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ModelEnumerator<'a> {
     ddnnf: &'a DecisionDNNF,
     or_edge_indices: Vec<usize>,
@@ -99,7 +100,13 @@ impl<'a> ModelEnumerator<'a> {
     #[allow(clippy::missing_panics_doc)]
     pub fn new(ddnnf: &'a DecisionDNNF, elude_free_vars: bool) -> Self {
         let n_nodes = ddnnf.nodes().as_slice().len();
-        let (or_free_vars, root_free_vars) = free_variables::compute(ddnnf);
+        let (mut or_free_vars, mut root_free_vars) = free_variables::compute(ddnnf);
+        for node_free_vars in &mut or_free_vars {
+            for child_free_vars in node_free_vars.iter_mut() {
+                child_free_vars.iter_mut().for_each(|l| *l = l.flip());
+            }
+        }
+        root_free_vars.iter_mut().for_each(|l| *l = l.flip());
         let mut model = vec![None; ddnnf.n_vars()];
         Self::update_model_with_propagations(&mut model, &root_free_vars, elude_free_vars);
         Self {
@@ -111,6 +118,36 @@ impl<'a> ModelEnumerator<'a> {
             model,
             has_model: true,
             elude_free_vars,
+        }
+    }
+
+    /// Loads the model which id is given thanks to a [`DirectAccessEngine`].
+    ///
+    /// This enumerator is set in the state in which it would have been if it enumerated the models from the first to the one with the given id.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if the [`DirectAccessEngine`] does not refer to the same [`DecisionDNNF`] than this object.
+    pub fn jump_to(
+        &mut self,
+        direct_access_engine: &DirectAccessEngine,
+        model_id: Integer,
+    ) -> Option<&[Option<Literal>]> {
+        assert!(
+            std::ptr::addr_eq(direct_access_engine.ddnnf(), self.ddnnf),
+            "model enumerator and direct access engine do not refer to the same Decision-DNNF"
+        );
+        let opt_model = direct_access_engine.model_with_graph(model_id);
+        if let Some((tmp_model, or_edge_indices)) = opt_model {
+            let model = tmp_model.into_iter().map(Some).collect::<Vec<_>>();
+            self.model = model;
+            self.has_model = true;
+            self.or_edge_indices = or_edge_indices;
+            self.first_computed = true;
+            Some(&self.model)
+        } else {
+            self.has_model = false;
+            None
         }
     }
 
@@ -205,7 +242,7 @@ impl<'a> ModelEnumerator<'a> {
         if elude_free_vars {
             return false;
         }
-        let has_next = if let Some(p) = interpretation.iter().rposition(Literal::polarity) {
+        let has_next = if let Some(p) = interpretation.iter().rposition(|l| !l.polarity()) {
             interpretation
                 .iter_mut()
                 .skip(p)
@@ -269,7 +306,7 @@ impl<'a> ModelEnumerator<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::D4Reader;
+    use crate::{D4Reader, ModelCounter};
 
     fn assert_models_eq(
         str_ddnnf: &str,
@@ -277,11 +314,7 @@ mod tests {
         n_vars: Option<usize>,
         hide_free_vars: bool,
     ) {
-        let sort = |v: &mut Vec<Vec<isize>>| {
-            v.iter_mut().for_each(|m| m.sort_unstable());
-            v.sort_unstable();
-        };
-        sort(&mut expected);
+        sort_models(&mut expected);
         let mut ddnnf = D4Reader::read(str_ddnnf.as_bytes()).unwrap();
         if let Some(n) = n_vars {
             ddnnf.update_n_vars(n);
@@ -295,8 +328,50 @@ mod tests {
                     .collect::<Vec<_>>(),
             );
         }
-        sort(&mut actual);
-        assert_eq!(expected, actual,);
+        sort_models(&mut actual);
+        assert_eq!(expected, actual);
+        let model_counter = ModelCounter::new(&ddnnf);
+        let direct_access = DirectAccessEngine::new(&model_counter);
+        if hide_free_vars {
+            return;
+        }
+        for i in 0..expected.len() {
+            assert_models_eq_after_jump(
+                &ddnnf,
+                &expected[i + 1..],
+                hide_free_vars,
+                &direct_access,
+                i,
+            );
+        }
+    }
+
+    fn assert_models_eq_after_jump(
+        ddnnf: &DecisionDNNF,
+        expected: &[Vec<isize>],
+        hide_free_vars: bool,
+        direct_access_engine: &DirectAccessEngine,
+        model_id: usize,
+    ) {
+        if !hide_free_vars {
+            return;
+        }
+        let mut model_enum = ModelEnumerator::new(ddnnf, hide_free_vars);
+        model_enum.jump_to(direct_access_engine, model_id.into());
+        let mut actual = Vec::new();
+        while let Some(m) = model_enum.compute_next_model() {
+            actual.push(
+                m.iter()
+                    .filter_map(|opt_l| opt_l.map(isize::from))
+                    .collect::<Vec<_>>(),
+            );
+        }
+        sort_models(&mut actual);
+        assert_eq!(expected, actual, "for model {model_id}");
+    }
+
+    fn sort_models(models: &mut [Vec<isize>]) {
+        models.iter_mut().for_each(|m| m.sort_unstable());
     }
 
     #[test]

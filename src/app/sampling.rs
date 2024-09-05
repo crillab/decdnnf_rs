@@ -57,11 +57,11 @@ impl<'a> crusti_app_helper::Command<'a> for Command {
             }
         }
         info!("sampling {n_samples} samples");
-        let mut engine = DirectAccessEngine::new(&model_counter);
+        let engine = DirectAccessEngine::new(&model_counter);
         let mut counter = Integer::ZERO;
         let mut swapped: FxHashMap<Integer, Integer> = FxHashMap::default();
         let mut rand = RandState::new_mersenne_twister();
-        let mut model_writer = ModelWriter::new(
+        let mut model_writer = ModelWriter::new_locked(
             ddnnf.n_vars(),
             false,
             arg_matches.is_present(ARG_DO_NOT_PRINT),

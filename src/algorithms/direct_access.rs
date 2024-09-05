@@ -1,6 +1,6 @@
 use crate::{
     core::{Node, NodeIndex},
-    Literal, ModelCounter,
+    DecisionDNNF, Literal, ModelCounter,
 };
 use rug::Integer;
 
@@ -24,17 +24,48 @@ impl<'a> DirectAccessEngine<'a> {
     }
 
     /// Returns the model at the given index.
-    pub fn model(&mut self, mut n: Integer) -> Option<Vec<Literal>> {
+    #[must_use]
+    pub fn model(&self, mut n: Integer) -> Option<Vec<Literal>> {
         if n >= *self.model_counter.n_models() {
             return None;
         }
         let mut model = vec![Literal::from(1); self.model_counter.ddnnf().n_vars()];
         update_model_with_free_vars(&mut model, &mut n, self.model_counter.root_free_vars());
-        self.build_model_from(&mut model, n, NodeIndex::from(0));
+        self.build_model_from(&mut model, n, NodeIndex::from(0), &mut |_, _| {});
         Some(model)
     }
 
-    fn build_model_from(&self, model: &mut [Literal], mut n: Integer, index: NodeIndex) {
+    /// Returns the model at the given index, along its model graph.
+    ///
+    /// If the index is higher than the number of models, [`None`] is returned.
+    #[must_use]
+    pub fn model_with_graph(&self, mut n: Integer) -> Option<(Vec<Literal>, Vec<usize>)> {
+        if n >= *self.model_counter.n_models() {
+            return None;
+        }
+        let mut model = vec![Literal::from(1); self.model_counter.ddnnf().n_vars()];
+        let mut model_graph = vec![0; self.model_counter.ddnnf().nodes().as_slice().len()];
+        update_model_with_free_vars(&mut model, &mut n, self.model_counter.root_free_vars());
+        self.build_model_from(
+            &mut model,
+            n,
+            NodeIndex::from(0),
+            &mut |node_index, child_index| {
+                model_graph[usize::from(node_index)] = child_index;
+            },
+        );
+        Some((model, model_graph))
+    }
+
+    fn build_model_from<F>(
+        &self,
+        model: &mut [Literal],
+        mut n: Integer,
+        index: NodeIndex,
+        on_or_child_selection: &mut F,
+    ) where
+        F: FnMut(NodeIndex, usize),
+    {
         match &self.model_counter.ddnnf().nodes()[index] {
             Node::And(edges) => {
                 for edge in edges {
@@ -45,7 +76,7 @@ impl<'a> DirectAccessEngine<'a> {
                     let target = edge.target();
                     let mut child_n_models = self.model_counter.n_models_from(target).to_owned();
                     n.div_rem_mut(&mut child_n_models);
-                    self.build_model_from(model, child_n_models, target);
+                    self.build_model_from(model, child_n_models, target, on_or_child_selection);
                 }
             }
             Node::Or(edges) => {
@@ -57,10 +88,11 @@ impl<'a> DirectAccessEngine<'a> {
                     let total_child_n_models = Integer::from(child_n_models << free_vars[i].len());
                     if n < total_child_n_models {
                         update_model_with_free_vars(model, &mut n, &free_vars[i]);
+                        on_or_child_selection(index, i);
                         edge.propagated()
                             .iter()
                             .for_each(|p| model[p.var_index()] = *p);
-                        self.build_model_from(model, n, target);
+                        self.build_model_from(model, n, target, on_or_child_selection);
                         return;
                     }
                     n -= total_child_n_models;
@@ -69,6 +101,12 @@ impl<'a> DirectAccessEngine<'a> {
             Node::True => {}
             Node::False => unreachable!(),
         }
+    }
+
+    /// Returns the underlying ddnnf.
+    #[must_use]
+    pub fn ddnnf(&self) -> &DecisionDNNF {
+        self.model_counter.ddnnf()
     }
 }
 
@@ -89,47 +127,62 @@ mod tests {
     use super::*;
     use crate::D4Reader;
 
-    fn assert_models_eq(str_ddnnf: &str, mut expected: Vec<Vec<isize>>, n_vars: Option<usize>) {
-        let sort = |v: &mut Vec<Vec<isize>>| {
-            v.iter_mut().for_each(|m| m.sort_unstable());
+    fn assert_models_eq(
+        str_ddnnf: &str,
+        expected_models: Vec<Vec<isize>>,
+        expected_graphs: Vec<Vec<usize>>,
+        n_vars: Option<usize>,
+    ) {
+        let sort = |v: &mut Vec<(Vec<isize>, Vec<usize>)>| {
+            v.iter_mut().for_each(|m| m.0.sort_unstable());
             v.sort_unstable();
         };
+        let mut expected = expected_models
+            .into_iter()
+            .zip(expected_graphs)
+            .collect::<Vec<_>>();
         sort(&mut expected);
         let mut ddnnf = D4Reader::read(str_ddnnf.as_bytes()).unwrap();
         if let Some(n) = n_vars {
             ddnnf.update_n_vars(n);
         }
         let model_counter = ModelCounter::new(&ddnnf);
-        let mut engine = DirectAccessEngine::new(&model_counter);
+        let engine = DirectAccessEngine::new(&model_counter);
         let n_models = engine.n_models();
         let mut actual = Vec::with_capacity(n_models.to_usize_wrapping());
         for i in 0..n_models.to_usize_wrapping() {
-            actual.push(
-                engine
-                    .model(i.into())
-                    .unwrap()
-                    .into_iter()
-                    .map(isize::from)
-                    .collect(),
-            );
+            let m0 = engine.model(i.into()).unwrap();
+            let (m1, g) = engine.model_with_graph(i.into()).unwrap();
+            assert_eq!(m0, m1);
+            actual.push((m1.into_iter().map(isize::from).collect(), g));
         }
         sort(&mut actual);
-        assert_eq!(expected, actual,);
+        assert_eq!(expected, actual);
     }
 
     #[test]
     fn test_unsat() {
-        assert_models_eq("f 1 0\n", vec![], None);
+        assert_models_eq("f 1 0\n", vec![], vec![], None);
     }
 
     #[test]
     fn test_single_model() {
-        assert_models_eq("a 1 0\nt 2 0\n1 2 1 0\n", vec![vec![1]], None);
+        assert_models_eq(
+            "a 1 0\nt 2 0\n1 2 1 0\n",
+            vec![vec![1]],
+            vec![vec![0, 0]],
+            None,
+        );
     }
 
     #[test]
     fn test_tautology() {
-        assert_models_eq("t 1 0\n", vec![vec![-1], vec![1]], Some(1));
+        assert_models_eq(
+            "t 1 0\n",
+            vec![vec![-1], vec![1]],
+            vec![vec![0], vec![0]],
+            Some(1),
+        );
     }
 
     #[test]
@@ -137,6 +190,7 @@ mod tests {
         assert_models_eq(
             "o 1 0\nt 2 0\n1 2 -1 0\n 1 2 1 0\n",
             vec![vec![-1], vec![1]],
+            vec![vec![0, 0], vec![1, 0]],
             None,
         );
     }
@@ -146,6 +200,7 @@ mod tests {
         assert_models_eq(
             "a 1 0\nt 2 0\n1 2 -1 0\n 1 2 -2 0\n",
             vec![vec![-1, -2]],
+            vec![vec![0, 0]],
             None,
         );
     }
@@ -155,6 +210,12 @@ mod tests {
         assert_models_eq(
             "a 1 0\no 2 0\no 3 0\nt 4 0\n1 2 0\n1 3 0\n2 4 -1 0\n2 4 1 0\n3 4 -2 0\n3 4 2 0\n",
             vec![vec![-1, -2], vec![-1, 2], vec![1, -2], vec![1, 2]],
+            vec![
+                vec![0, 0, 0, 0],
+                vec![0, 0, 1, 0],
+                vec![0, 1, 0, 0],
+                vec![0, 1, 1, 0],
+            ],
             None,
         );
     }
@@ -164,6 +225,7 @@ mod tests {
         assert_models_eq(
             "o 1 0\na 2 0\na 3 0\nt 4 0\n1 2 0\n1 3 0\n2 4 -1 0\n2 4 -2 0\n3 4 1 0\n3 4 2 0\n",
             vec![vec![-1, -2], vec![1, 2]],
+            vec![vec![0, 0, 0, 0], vec![1, 0, 0, 0]],
             None,
         );
     }
@@ -179,6 +241,7 @@ mod tests {
             1 2 0
             ",
             vec![vec![-1, -2], vec![1, -2], vec![1, 2]],
+            vec![vec![0, 0, 0], vec![0, 1, 0], vec![0, 1, 0]],
             None,
         );
     }
@@ -195,6 +258,7 @@ mod tests {
             1 2 0
             ",
             vec![vec![-1, -2], vec![-1, 2]],
+            vec![vec![0, 0, 0, 0], vec![0, 0, 0, 0]],
             Some(2),
         );
     }

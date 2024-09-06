@@ -1,8 +1,10 @@
+use crate::FreeVariables;
 use anyhow::{anyhow, Result};
 use std::{
     fmt::{Debug, Display},
     ops::Index,
     str::FromStr,
+    sync::OnceLock,
 };
 
 /// A structure representing a literal.
@@ -164,6 +166,7 @@ pub struct DecisionDNNF {
     n_vars: usize,
     nodes: NodeVec,
     edges: EdgeVec,
+    free_vars: OnceLock<FreeVariables>,
 }
 
 impl DecisionDNNF {
@@ -172,6 +175,7 @@ impl DecisionDNNF {
             n_vars,
             nodes: NodeVec(nodes),
             edges: EdgeVec(edges),
+            free_vars: OnceLock::new(),
         }
     }
 
@@ -207,6 +211,13 @@ impl DecisionDNNF {
 
     pub(crate) fn edges(&self) -> &EdgeVec {
         &self.edges
+    }
+
+    /// Returns the free variables.
+    ///
+    /// See [`FreeVariables`] for more information.
+    pub fn free_vars(&self) -> &FreeVariables {
+        self.free_vars.get_or_init(|| FreeVariables::compute(self))
     }
 }
 

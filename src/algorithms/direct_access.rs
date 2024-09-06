@@ -57,7 +57,7 @@ where
         update_model_with_free_vars(
             &mut model,
             &mut n,
-            self.counter.root_free_vars(),
+            self.ddnnf().free_vars().root_free_vars(),
             self.elude_free_vars,
         );
         self.build_model_from(&mut model, n, NodeIndex::from(0), &mut |_, _| {});
@@ -77,7 +77,7 @@ where
         update_model_with_free_vars(
             &mut model,
             &mut n,
-            self.counter.root_free_vars(),
+            self.ddnnf().free_vars().root_free_vars(),
             self.elude_free_vars,
         );
         self.build_model_from(
@@ -114,7 +114,7 @@ where
                 }
             }
             Node::Or(edges) => {
-                let free_vars = &self.counter.or_free_vars()[usize::from(index)];
+                let free_vars = &self.ddnnf().free_vars().or_free_vars()[usize::from(index)];
                 for (i, edge) in edges.iter().enumerate() {
                     let edge = &self.counter.ddnnf().edges()[*edge];
                     let target = edge.target();

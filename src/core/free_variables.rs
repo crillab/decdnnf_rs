@@ -3,7 +3,7 @@ use crate::{
     DecisionDNNF, Literal,
 };
 
-/// Computes the free variables, ie. the variables that does not appear in (some) models.
+/// A structure used to computes the free variables, ie. the variables that does not appear in (some) models.
 ///
 /// Free variables can appear in two cases: when they do not appear at all in the formula (what we call *root free variables*),
 /// or when they appear in some child of a disjunction node but not all the children (what we call *OR free variables*).
@@ -16,22 +16,50 @@ use crate::{
 /// The root free variables are simply returned as a vector of literal.
 ///
 /// The literals encoding the free variables are always the positive ones.
-pub fn compute(ddnnf: &DecisionDNNF) -> (Vec<Vec<Vec<Literal>>>, Vec<Literal>) {
-    let n_nodes = ddnnf.nodes().as_slice().len();
-    let mut involved_vars = vec![None; n_nodes];
-    let mut or_free_vars = vec![vec![]; n_nodes];
-    compute_free_vars_from(
-        ddnnf,
-        NodeIndex::from(0),
-        &mut involved_vars,
-        &mut or_free_vars,
-    );
-    let root_free_vars = involved_vars[0]
-        .as_ref()
-        .unwrap()
-        .iter_missing_literals()
-        .collect::<Vec<_>>();
-    (or_free_vars, root_free_vars)
+#[derive(Debug)]
+pub struct FreeVariables {
+    root_free_vars: Vec<Literal>,
+    or_free_vars: Vec<Vec<Vec<Literal>>>,
+}
+
+impl FreeVariables {
+    /// Computes the free variables of the given Decision-DNNF.
+    pub(crate) fn compute(ddnnf: &DecisionDNNF) -> Self {
+        let n_nodes = ddnnf.nodes().as_slice().len();
+        let mut involved_vars = vec![None; n_nodes];
+        let mut or_free_vars = vec![vec![]; n_nodes];
+        compute_free_vars_from(
+            ddnnf,
+            NodeIndex::from(0),
+            &mut involved_vars,
+            &mut or_free_vars,
+        );
+        let root_free_vars = involved_vars[0]
+            .as_ref()
+            .unwrap()
+            .iter_missing_literals()
+            .collect::<Vec<_>>();
+        Self {
+            root_free_vars,
+            or_free_vars,
+        }
+    }
+
+    /// Returns the root free variables.
+    ///
+    /// See the structure documentation for more information.
+    #[must_use]
+    pub fn root_free_vars(&self) -> &[Literal] {
+        &self.root_free_vars
+    }
+
+    /// Returns the OR free variables.
+    ///
+    /// See the structure documentation for more information.
+    #[must_use]
+    pub fn or_free_vars(&self) -> &[Vec<Vec<Literal>>] {
+        &self.or_free_vars
+    }
 }
 
 fn compute_free_vars_from(

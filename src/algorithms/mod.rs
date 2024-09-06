@@ -10,8 +10,6 @@ pub use counting::PathCounter;
 mod direct_access;
 pub use direct_access::DirectAccessEngine;
 
-mod free_variables;
-
 mod model_enumerator;
 pub use model_enumerator::ModelEnumerator;
 

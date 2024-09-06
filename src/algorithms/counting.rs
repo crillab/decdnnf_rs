@@ -1,4 +1,3 @@
-use super::free_variables;
 use crate::{
     core::{EdgeIndex, Node, NodeIndex},
     DecisionDNNF, Literal,
@@ -23,29 +22,26 @@ use rug::Integer;
 pub struct ModelCounter<'a> {
     ddnnf: &'a DecisionDNNF,
     n_models: Vec<Option<Integer>>,
-    or_free_vars: Vec<Vec<Vec<Literal>>>,
-    root_free_vars: Vec<Literal>,
 }
 
 impl<'a> ModelCounter<'a> {
     /// Builds a new model counter given a formula.
     #[must_use]
     pub fn new(ddnnf: &'a DecisionDNNF) -> Self {
-        let (or_free_vars, root_free_vars) = free_variables::compute(ddnnf);
         let mut n_models = vec![None; ddnnf.nodes().as_slice().len()];
+        let free_variables = ddnnf.free_vars();
         compute_models_from(
             ddnnf,
-            &root_free_vars,
-            &|index| or_free_vars[usize::from(index)].iter().map(Vec::len),
+            free_variables.root_free_vars(),
+            &|index| {
+                free_variables.or_free_vars()[usize::from(index)]
+                    .iter()
+                    .map(Vec::len)
+            },
             NodeIndex::from(0),
             &mut n_models,
         );
-        Self {
-            ddnnf,
-            n_models,
-            or_free_vars,
-            root_free_vars,
-        }
+        Self { ddnnf, n_models }
     }
 }
 
@@ -67,15 +63,12 @@ impl<'a> ModelCounter<'a> {
 pub struct PathCounter<'a> {
     ddnnf: &'a DecisionDNNF,
     n_models: Vec<Option<Integer>>,
-    or_free_vars: Vec<Vec<Vec<Literal>>>,
-    root_free_vars: Vec<Literal>,
 }
 
 impl<'a> PathCounter<'a> {
     /// Builds a new path counter given a formula.
     #[must_use]
     pub fn new(ddnnf: &'a DecisionDNNF) -> Self {
-        let (or_free_vars, root_free_vars) = free_variables::compute(ddnnf);
         let mut n_models = vec![None; ddnnf.nodes().as_slice().len()];
         compute_models_from(
             ddnnf,
@@ -87,12 +80,7 @@ impl<'a> PathCounter<'a> {
             NodeIndex::from(0),
             &mut n_models,
         );
-        Self {
-            ddnnf,
-            n_models,
-            or_free_vars,
-            root_free_vars,
-        }
+        Self { ddnnf, n_models }
     }
 }
 
@@ -111,12 +99,6 @@ pub trait Counter {
     /// Returns the [`DecisionDNNF`] which elements are counted.
     #[must_use]
     fn ddnnf(&self) -> &DecisionDNNF;
-
-    /// Returns the variables that do not appear in the formula.
-    fn root_free_vars(&self) -> &[Literal];
-
-    /// Returns a vector indicating, for each OR node, the variables that do not appear in a child while they appear in at least another one.
-    fn or_free_vars(&self) -> &[Vec<Vec<Literal>>];
 }
 
 macro_rules! counter_impl {
@@ -132,14 +114,6 @@ macro_rules! counter_impl {
 
             fn count_from(&self, index: NodeIndex) -> &Integer {
                 self.n_models[usize::from(index)].as_ref().unwrap()
-            }
-
-            fn root_free_vars(&self) -> &[Literal] {
-                &self.root_free_vars
-            }
-
-            fn or_free_vars(&self) -> &[Vec<Vec<Literal>>] {
-                &self.or_free_vars
             }
         }
     };

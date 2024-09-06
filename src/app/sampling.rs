@@ -57,7 +57,7 @@ impl<'a> crusti_app_helper::Command<'a> for Command {
             }
         }
         info!("sampling {n_samples} samples");
-        let engine = DirectAccessEngine::new(&model_counter);
+        let engine = DirectAccessEngine::new_for_models(&model_counter);
         let mut counter = Integer::ZERO;
         let mut swapped: FxHashMap<Integer, Integer> = FxHashMap::default();
         let mut rand = RandState::new_mersenne_twister();
@@ -75,7 +75,7 @@ impl<'a> crusti_app_helper::Command<'a> for Command {
                 .insert(rand_index, last_value)
                 .unwrap_or_else(|| Integer::from(bound.random_below_ref(&mut rand)));
             let model = engine.model(rand_value).unwrap();
-            model_writer.write_model_no_opt(&model);
+            model_writer.write_model_ordered(&model);
             counter += 1;
         }
         model_writer.finalize();

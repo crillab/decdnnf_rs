@@ -1,7 +1,7 @@
-use super::{free_variables, DirectAccessEngine};
+use super::free_variables;
 use crate::{
     core::{EdgeIndex, Node, NodeIndex},
-    DecisionDNNF, Literal,
+    DecisionDNNF, DirectAccessEngine, Literal, ModelCounter,
 };
 use rug::Integer;
 
@@ -130,7 +130,7 @@ impl<'a> ModelEnumerator<'a> {
     /// This function panics if the [`DirectAccessEngine`] does not refer to the same [`DecisionDNNF`] than this object.
     pub fn jump_to(
         &mut self,
-        direct_access_engine: &DirectAccessEngine,
+        direct_access_engine: &DirectAccessEngine<ModelCounter<'_>>,
         model_id: Integer,
     ) -> Option<&[Option<Literal>]> {
         assert!(
@@ -138,8 +138,7 @@ impl<'a> ModelEnumerator<'a> {
             "model enumerator and direct access engine do not refer to the same Decision-DNNF"
         );
         let opt_model = direct_access_engine.model_with_graph(model_id);
-        if let Some((tmp_model, or_edge_indices)) = opt_model {
-            let model = tmp_model.into_iter().map(Some).collect::<Vec<_>>();
+        if let Some((model, or_edge_indices)) = opt_model {
             self.model = model;
             self.has_model = true;
             self.or_edge_indices = or_edge_indices;
@@ -331,7 +330,7 @@ mod tests {
         sort_models(&mut actual);
         assert_eq!(expected, actual);
         let model_counter = ModelCounter::new(&ddnnf);
-        let direct_access = DirectAccessEngine::new(&model_counter);
+        let direct_access = DirectAccessEngine::new_for_models(&model_counter);
         if hide_free_vars {
             return;
         }
@@ -350,7 +349,7 @@ mod tests {
         ddnnf: &DecisionDNNF,
         expected: &[Vec<isize>],
         hide_free_vars: bool,
-        direct_access_engine: &DirectAccessEngine,
+        direct_access_engine: &DirectAccessEngine<ModelCounter<'_>>,
         model_id: usize,
     ) {
         if !hide_free_vars {

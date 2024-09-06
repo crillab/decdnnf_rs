@@ -107,7 +107,7 @@ fn enum_default_parallel(arg_matches: &crusti_app_helper::ArgMatches<'_>) -> any
         );
         let mut model_iterator =
             ModelEnumerator::new(&ddnnf, arg_matches.is_present(ARG_COMPACT_FREE_VARS));
-        let direct_access_engine = DirectAccessEngine::new(&model_counter);
+        let direct_access_engine = DirectAccessEngine::new_for_models(&model_counter);
         loop {
             let mut lock = next_min_bound.lock().unwrap();
             let mut min_bound = lock.clone();

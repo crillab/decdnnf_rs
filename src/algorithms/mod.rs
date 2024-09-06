@@ -4,7 +4,6 @@ pub use checker::CheckingVisitorData;
 
 mod counting;
 pub use counting::Counter;
-pub(crate) use counting::CounterPrivate;
 pub use counting::ModelCounter;
 pub use counting::PathCounter;
 

@@ -96,22 +96,26 @@ impl<'a> PathCounter<'a> {
     }
 }
 
-/// A trait for objects that count elements on a Decision-DNNF.
+/// A trait for objects that count models or paths of a Decision-DNNF.
+///
+/// This trait provides function allowing to get the count for a whole formula, or for a subformula.
 pub trait Counter {
     /// Returns the number of counted elements of the whole formula.
     #[must_use]
     fn global_count(&self) -> &Integer;
 
+    /// Returns the number of counted elements of the subfomula rooted at the node which index is given.
+    #[must_use]
+    fn count_from(&self, index: NodeIndex) -> &Integer;
+
     /// Returns the [`DecisionDNNF`] which elements are counted.
     #[must_use]
     fn ddnnf(&self) -> &DecisionDNNF;
-}
 
-pub(crate) trait CounterPrivate {
-    fn count_from(&self, index: NodeIndex) -> &Integer;
-
+    /// Returns the variables that do not appear in the formula.
     fn root_free_vars(&self) -> &[Literal];
 
+    /// Returns a vector indicating, for each OR node, the variables that do not appear in a child while they appear in at least another one.
     fn or_free_vars(&self) -> &[Vec<Vec<Literal>>];
 }
 
@@ -125,9 +129,7 @@ macro_rules! counter_impl {
             fn ddnnf(&self) -> &DecisionDNNF {
                 self.ddnnf
             }
-        }
 
-        impl CounterPrivate for $type {
             fn count_from(&self, index: NodeIndex) -> &Integer {
                 self.n_models[usize::from(index)].as_ref().unwrap()
             }

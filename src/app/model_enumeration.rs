@@ -1,10 +1,12 @@
-use std::{io::Write, sync::Mutex};
 use super::{common, model_writer::ModelWriter};
 use anyhow::Context;
 use crusti_app_helper::{info, App, AppSettings, Arg, SubCommand};
-use decdnnf_rs::{DirectAccessEngine, Literal, ModelCounter, ModelEnumerator, ModelFinder};
+use decdnnf_rs::{
+    Counter, DirectAccessEngine, Literal, ModelCounter, ModelEnumerator, ModelFinder,
+};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use rug::Integer;
+use std::{io::Write, sync::Mutex};
 
 #[derive(Default)]
 pub struct Command;
@@ -91,7 +93,7 @@ fn enum_default(arg_matches: &crusti_app_helper::ArgMatches<'_>) -> anyhow::Resu
 fn enum_default_parallel(arg_matches: &crusti_app_helper::ArgMatches<'_>) -> anyhow::Result<()> {
     let ddnnf = common::read_and_check_input_ddnnf(arg_matches)?;
     let model_counter = ModelCounter::new(&ddnnf);
-    let n_models = model_counter.n_models();
+    let n_models = model_counter.global_count();
     let next_min_bound = Mutex::new(Integer::ZERO);
     let writers_n_enumerated = Mutex::new(Integer::ZERO);
     let writers_n_models = Mutex::new(Integer::ZERO);

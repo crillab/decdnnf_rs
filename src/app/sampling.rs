@@ -2,7 +2,7 @@ use super::common;
 use crate::app::model_writer::ModelWriter;
 use anyhow::Context;
 use crusti_app_helper::{info, App, AppSettings, Arg, SubCommand};
-use decdnnf_rs::{DirectAccessEngine, ModelCounter};
+use decdnnf_rs::{Counter, DirectAccessEngine, ModelCounter};
 use rug::{rand::RandState, Integer};
 use rustc_hash::FxHashMap;
 use std::str::FromStr;
@@ -46,9 +46,9 @@ impl<'a> crusti_app_helper::Command<'a> for Command {
     fn execute(&self, arg_matches: &crusti_app_helper::ArgMatches<'_>) -> anyhow::Result<()> {
         let ddnnf = common::read_and_check_input_ddnnf(arg_matches)?;
         let model_counter = ModelCounter::new(&ddnnf);
-        let n_models = model_counter.n_models();
+        let n_models = model_counter.global_count();
         info!("formula has {n_models} models");
-        let mut n_samples = model_counter.n_models().clone();
+        let mut n_samples = model_counter.global_count().clone();
         if let Some(str_n) = arg_matches.value_of(ARG_LIMIT) {
             let n = Integer::from_str(str_n)
                 .context("while parsing the maximal number of models to print")?;

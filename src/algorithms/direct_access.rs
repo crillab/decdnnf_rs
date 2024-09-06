@@ -1,6 +1,7 @@
+use super::CounterPrivate;
 use crate::{
     core::{Node, NodeIndex},
-    DecisionDNNF, Literal, ModelCounter,
+    Counter, DecisionDNNF, Literal, ModelCounter,
 };
 use rug::Integer;
 
@@ -20,13 +21,13 @@ impl<'a> DirectAccessEngine<'a> {
     /// Returns the number of models of the formula.
     #[must_use]
     pub fn n_models(&self) -> &Integer {
-        self.model_counter.n_models()
+        self.model_counter.global_count()
     }
 
     /// Returns the model at the given index.
     #[must_use]
     pub fn model(&self, mut n: Integer) -> Option<Vec<Literal>> {
-        if n >= *self.model_counter.n_models() {
+        if n >= *self.model_counter.global_count() {
             return None;
         }
         let mut model = vec![Literal::from(1); self.model_counter.ddnnf().n_vars()];
@@ -40,7 +41,7 @@ impl<'a> DirectAccessEngine<'a> {
     /// If the index is higher than the number of models, [`None`] is returned.
     #[must_use]
     pub fn model_with_graph(&self, mut n: Integer) -> Option<(Vec<Literal>, Vec<usize>)> {
-        if n >= *self.model_counter.n_models() {
+        if n >= *self.model_counter.global_count() {
             return None;
         }
         let mut model = vec![Literal::from(1); self.model_counter.ddnnf().n_vars()];
@@ -74,7 +75,7 @@ impl<'a> DirectAccessEngine<'a> {
                         .iter()
                         .for_each(|p| model[p.var_index()] = *p);
                     let target = edge.target();
-                    let mut child_n_models = self.model_counter.n_models_from(target).to_owned();
+                    let mut child_n_models = self.model_counter.count_from(target).to_owned();
                     n.div_rem_mut(&mut child_n_models);
                     self.build_model_from(model, child_n_models, target, on_or_child_selection);
                 }
@@ -84,7 +85,7 @@ impl<'a> DirectAccessEngine<'a> {
                 for (i, edge) in edges.iter().enumerate() {
                     let edge = &self.model_counter.ddnnf().edges()[*edge];
                     let target = edge.target();
-                    let child_n_models = self.model_counter.n_models_from(target);
+                    let child_n_models = self.model_counter.count_from(target);
                     let total_child_n_models = Integer::from(child_n_models << free_vars[i].len());
                     if n < total_child_n_models {
                         update_model_with_free_vars(model, &mut n, &free_vars[i]);

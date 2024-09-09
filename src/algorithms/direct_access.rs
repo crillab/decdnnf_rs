@@ -102,7 +102,7 @@ where
     {
         match &self.counter.ddnnf().nodes()[index] {
             Node::And(edges) => {
-                for edge in edges {
+                for edge in edges.iter().rev() {
                     let edge = &self.counter.ddnnf().edges()[*edge];
                     edge.propagated()
                         .iter()
@@ -119,7 +119,11 @@ where
                     let edge = &self.counter.ddnnf().edges()[*edge];
                     let target = edge.target();
                     let child_n_models = self.counter.count_from(target);
-                    let total_child_n_models = Integer::from(child_n_models << free_vars[i].len());
+                    let total_child_n_models = if self.elude_free_vars {
+                        Integer::from(child_n_models)
+                    } else {
+                        Integer::from(child_n_models << free_vars[i].len())
+                    };
                     if n < total_child_n_models {
                         update_model_with_free_vars(
                             model,
@@ -155,7 +159,7 @@ fn update_model_with_free_vars(
     free_vars: &[Literal],
     update_with_none: bool,
 ) {
-    for (i, v) in free_vars.iter().enumerate() {
+    for (i, v) in free_vars.iter().rev().enumerate() {
         #[allow(clippy::cast_possible_truncation)]
         if update_with_none {
             model[v.var_index()] = None;
@@ -165,7 +169,9 @@ fn update_model_with_free_vars(
             model[v.var_index()] = Some(v.flip());
         }
     }
-    *n >>= free_vars.len();
+    if !update_with_none {
+        *n >>= free_vars.len();
+    }
 }
 
 #[cfg(test)]
@@ -178,26 +184,25 @@ mod tests {
         expected_models: Vec<Vec<isize>>,
         expected_partial_models: Vec<Vec<isize>>,
         expected_graphs: Vec<Vec<usize>>,
+        expected_partial_graphs: Vec<Vec<usize>>,
         n_vars: Option<usize>,
     ) {
         let mut ddnnf = D4Reader::read(str_ddnnf.as_bytes()).unwrap();
         if let Some(n) = n_vars {
             ddnnf.update_n_vars(n);
         }
-        let mut expected_models_with_graphs = expected_models
+        let expected_models_with_graphs = expected_models
             .into_iter()
-            .zip(expected_graphs.clone())
+            .zip(expected_graphs)
             .collect::<Vec<_>>();
-        sort(&mut expected_models_with_graphs);
         let model_counter = ModelCounter::new(&ddnnf);
         let engine = DirectAccessEngine::new_for_models(&model_counter);
         let actual_models = compute_models(&engine);
         assert_eq!(expected_models_with_graphs, actual_models);
-        let mut expected_partial_models_with_graphs = expected_partial_models
+        let expected_partial_models_with_graphs = expected_partial_models
             .into_iter()
-            .zip(expected_graphs)
+            .zip(expected_partial_graphs)
             .collect::<Vec<_>>();
-        sort(&mut expected_partial_models_with_graphs);
         let path_counter = PathCounter::new(&ddnnf);
         let engine = DirectAccessEngine::new_for_partial_models(&path_counter);
         let actual_partial_models = compute_models(&engine);
@@ -221,18 +226,12 @@ mod tests {
                 g,
             ));
         }
-        sort(&mut actual);
         actual
-    }
-
-    fn sort(v: &mut [(Vec<isize>, Vec<usize>)]) {
-        v.iter_mut().for_each(|m| m.0.sort_unstable());
-        v.sort_unstable();
     }
 
     #[test]
     fn test_unsat() {
-        assert_models_eq("f 1 0\n", vec![], vec![], vec![], None);
+        assert_models_eq("f 1 0\n", vec![], vec![], vec![], vec![], None);
     }
 
     #[test]
@@ -241,6 +240,7 @@ mod tests {
             "a 1 0\nt 2 0\n1 2 1 0\n",
             vec![vec![1]],
             vec![vec![1]],
+            vec![vec![0, 0]],
             vec![vec![0, 0]],
             None,
         );
@@ -253,7 +253,20 @@ mod tests {
             vec![vec![-1], vec![1]],
             vec![vec![]],
             vec![vec![0], vec![0]],
+            vec![vec![0], vec![0]],
             Some(1),
+        );
+    }
+
+    #[test]
+    fn test_tautology_two_vars() {
+        assert_models_eq(
+            "t 1 0\n",
+            vec![vec![-1, -2], vec![-1, 2], vec![1, -2], vec![1, 2]],
+            vec![vec![]],
+            vec![vec![0], vec![0], vec![0], vec![0]],
+            vec![vec![0], vec![0], vec![0], vec![0]],
+            Some(2),
         );
     }
 
@@ -264,7 +277,20 @@ mod tests {
             vec![vec![-1], vec![1]],
             vec![vec![-1], vec![1]],
             vec![vec![0, 0], vec![1, 0]],
+            vec![vec![0, 0], vec![1, 0]],
             None,
+        );
+    }
+
+    #[test]
+    fn test_or_with_free_var() {
+        assert_models_eq(
+            "o 1 0\nt 2 0\n1 2 -1 0\n 1 2 1 0\n",
+            vec![vec![-1, -2], vec![-1, 2], vec![1, -2], vec![1, 2]],
+            vec![vec![-1], vec![1]],
+            vec![vec![0, 0], vec![0, 0], vec![1, 0], vec![1, 0]],
+            vec![vec![0, 0], vec![1, 0]],
+            Some(2),
         );
     }
 
@@ -274,6 +300,7 @@ mod tests {
             "a 1 0\nt 2 0\n1 2 -1 0\n 1 2 -2 0\n",
             vec![vec![-1, -2]],
             vec![vec![-1, -2]],
+            vec![vec![0, 0]],
             vec![vec![0, 0]],
             None,
         );
@@ -291,6 +318,12 @@ mod tests {
                 vec![0, 1, 0, 0],
                 vec![0, 1, 1, 0],
             ],
+            vec![
+                vec![0, 0, 0, 0],
+                vec![0, 0, 1, 0],
+                vec![0, 1, 0, 0],
+                vec![0, 1, 1, 0],
+            ],
             None,
         );
     }
@@ -301,6 +334,7 @@ mod tests {
             "o 1 0\na 2 0\na 3 0\nt 4 0\n1 2 0\n1 3 0\n2 4 -1 0\n2 4 -2 0\n3 4 1 0\n3 4 2 0\n",
             vec![vec![-1, -2], vec![1, 2]],
             vec![vec![-1, -2], vec![1, 2]],
+            vec![vec![0, 0, 0, 0], vec![1, 0, 0, 0]],
             vec![vec![0, 0, 0, 0], vec![1, 0, 0, 0]],
             None,
         );
@@ -319,6 +353,7 @@ mod tests {
             vec![vec![-1, -2], vec![1, -2], vec![1, 2]],
             vec![vec![-1, -2], vec![1]],
             vec![vec![0, 0, 0], vec![0, 1, 0], vec![0, 1, 0]],
+            vec![vec![0, 0, 0], vec![0, 1, 0], vec![0, 1, 0]],
             None,
         );
     }
@@ -336,6 +371,7 @@ mod tests {
             ",
             vec![vec![-1, -2], vec![-1, 2]],
             vec![vec![-1]],
+            vec![vec![0, 0, 0, 0], vec![0, 0, 0, 0]],
             vec![vec![0, 0, 0, 0], vec![0, 0, 0, 0]],
             Some(2),
         );

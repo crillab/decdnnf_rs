@@ -316,11 +316,10 @@ mod tests {
 
     fn assert_models_eq(
         str_ddnnf: &str,
-        mut expected: Vec<Vec<isize>>,
+        expected: &[Vec<isize>],
         n_vars: Option<usize>,
         hide_free_vars: bool,
     ) {
-        sort_models(&mut expected);
         let mut ddnnf = D4Reader::read(str_ddnnf.as_bytes()).unwrap();
         if let Some(n) = n_vars {
             ddnnf.update_n_vars(n);
@@ -334,7 +333,6 @@ mod tests {
                     .collect::<Vec<_>>(),
             );
         }
-        sort_models(&mut actual);
         assert_eq!(expected, actual);
         let model_counter = ModelCounter::new(&ddnnf);
         let direct_access = DirectAccessEngine::new_for_models(&model_counter);
@@ -372,35 +370,50 @@ mod tests {
                     .collect::<Vec<_>>(),
             );
         }
-        sort_models(&mut actual);
         assert_eq!(expected, actual, "for model {model_id}");
-    }
-
-    fn sort_models(models: &mut [Vec<isize>]) {
-        models.iter_mut().for_each(|m| m.sort_unstable());
     }
 
     #[test]
     fn test_unsat() {
-        assert_models_eq("f 1 0\n", vec![], None, false);
+        assert_models_eq("f 1 0\n", &[], None, false);
     }
 
     #[test]
     fn test_single_model() {
-        assert_models_eq("a 1 0\nt 2 0\n1 2 1 0\n", vec![vec![1]], None, false);
+        assert_models_eq("a 1 0\nt 2 0\n1 2 1 0\n", &[vec![1]], None, false);
     }
 
     #[test]
     fn test_tautology() {
-        assert_models_eq("t 1 0\n", vec![vec![-1], vec![1]], Some(1), false);
+        assert_models_eq("t 1 0\n", &[vec![-1], vec![1]], Some(1), false);
+    }
+
+    #[test]
+    fn test_tautology_two_vars() {
+        assert_models_eq(
+            "t 1 0\n",
+            &[vec![-1, -2], vec![-1, 2], vec![1, -2], vec![1, 2]],
+            Some(2),
+            false,
+        );
     }
 
     #[test]
     fn test_or() {
         assert_models_eq(
             "o 1 0\nt 2 0\n1 2 -1 0\n 1 2 1 0\n",
-            vec![vec![-1], vec![1]],
+            &[vec![-1], vec![1]],
             None,
+            false,
+        );
+    }
+
+    #[test]
+    fn test_or_with_free_var() {
+        assert_models_eq(
+            "o 1 0\nt 2 0\n1 2 -1 0\n 1 2 1 0\n",
+            &[vec![-1, -2], vec![-1, 2], vec![1, -2], vec![1, 2]],
+            Some(2),
             false,
         );
     }
@@ -409,7 +422,7 @@ mod tests {
     fn test_and() {
         assert_models_eq(
             "a 1 0\nt 2 0\n1 2 -1 0\n 1 2 -2 0\n",
-            vec![vec![-1, -2]],
+            &[vec![-1, -2]],
             None,
             false,
         );
@@ -419,7 +432,7 @@ mod tests {
     fn test_and_or() {
         assert_models_eq(
             "a 1 0\no 2 0\no 3 0\nt 4 0\n1 2 0\n1 3 0\n2 4 -1 0\n2 4 1 0\n3 4 -2 0\n3 4 2 0\n",
-            vec![vec![-1, -2], vec![-1, 2], vec![1, -2], vec![1, 2]],
+            &[vec![-1, -2], vec![-1, 2], vec![1, -2], vec![1, 2]],
             None,
             false,
         );
@@ -429,7 +442,7 @@ mod tests {
     fn test_or_and() {
         assert_models_eq(
             "o 1 0\na 2 0\na 3 0\nt 4 0\n1 2 0\n1 3 0\n2 4 -1 0\n2 4 -2 0\n3 4 1 0\n3 4 2 0\n",
-            vec![vec![-1, -2], vec![1, 2]],
+            &[vec![-1, -2], vec![1, 2]],
             None,
             false,
         );
@@ -445,7 +458,7 @@ mod tests {
             2 3 1 0
             1 2 0
             ",
-            vec![vec![-1, -2], vec![1, -2], vec![1, 2]],
+            &[vec![-1, -2], vec![1, -2], vec![1, 2]],
             None,
             false,
         );
@@ -462,7 +475,7 @@ mod tests {
             2 4 1 0
             1 2 0
             ",
-            vec![vec![-1, -2], vec![-1, 2]],
+            &[vec![-1, -2], vec![-1, 2]],
             Some(2),
             false,
         );
@@ -470,6 +483,6 @@ mod tests {
 
     #[test]
     fn test_hide_free_var_tautology() {
-        assert_models_eq("t 1 0", vec![vec![]], Some(2), true);
+        assert_models_eq("t 1 0", &[vec![]], Some(2), true);
     }
 }

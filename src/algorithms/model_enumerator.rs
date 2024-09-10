@@ -150,6 +150,27 @@ impl<'a> ModelEnumerator<'a> {
             self.has_model = true;
             self.or_edge_indices = or_edge_indices;
             self.first_computed = true;
+            if !self.elude_free_vars {
+                for l in &mut self.root_free_vars_assignment {
+                    *l = self.model[l.var_index()].unwrap();
+                }
+                for (var_index, children) in self.or_free_vars_assignments.iter_mut().enumerate() {
+                    let selected_child_index = self.or_edge_indices[var_index];
+                    for (child_index, free_vars) in children.iter_mut().enumerate() {
+                        if child_index == selected_child_index {
+                            for l in free_vars {
+                                *l = self.model[l.var_index()].unwrap();
+                            }
+                        } else {
+                            for l in free_vars.iter_mut() {
+                                if l.polarity() {
+                                    *l = l.flip();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             Some(&self.model)
         } else {
             self.has_model = false;
@@ -217,7 +238,7 @@ impl<'a> ModelEnumerator<'a> {
                         return false;
                     }
                     child_index += 1;
-                    self.or_edge_indices[usize::from(from)] += child_index;
+                    self.or_edge_indices[usize::from(from)] += 1;
                     if self.update_or_edge(from, edges[child_index]) {
                         break;
                     }
@@ -357,9 +378,6 @@ mod tests {
         direct_access_engine: &DirectAccessEngine<ModelCounter<'_>>,
         model_id: usize,
     ) {
-        if !hide_free_vars {
-            return;
-        }
         let mut model_enum = ModelEnumerator::new(ddnnf, hide_free_vars);
         model_enum.jump_to(direct_access_engine, model_id.into());
         let mut actual = Vec::new();
@@ -484,5 +502,22 @@ mod tests {
     #[test]
     fn test_hide_free_var_tautology() {
         assert_models_eq("t 1 0", &[vec![]], Some(2), true);
+    }
+
+    #[test]
+    fn test_counter_models() {
+        assert_models_eq(
+            r"o 1 0
+            t 2 0
+            f 3 0
+            1 2 -1 -2 0
+            1 3 -1 2 0
+            1 3 1 -2 0
+            1 2 1 2 0
+            ",
+            &[vec![-1, -2], vec![1, 2]],
+            None,
+            false,
+        );
     }
 }

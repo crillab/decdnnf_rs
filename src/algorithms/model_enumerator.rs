@@ -154,27 +154,42 @@ impl<'a> ModelEnumerator<'a> {
                 for l in &mut self.root_free_vars_assignment {
                     *l = self.model[l.var_index()].unwrap();
                 }
-                for (var_index, children) in self.or_free_vars_assignments.iter_mut().enumerate() {
-                    let selected_child_index = self.or_edge_indices[var_index];
-                    for (child_index, free_vars) in children.iter_mut().enumerate() {
-                        if child_index == selected_child_index {
-                            for l in free_vars {
-                                *l = self.model[l.var_index()].unwrap();
-                            }
-                        } else {
-                            for l in free_vars.iter_mut() {
-                                if l.polarity() {
-                                    *l = l.flip();
-                                }
-                            }
+                for or_children_free_vars_assignments in &mut self.or_free_vars_assignments {
+                    for edge_free_vars_assigments in or_children_free_vars_assignments {
+                        for l in edge_free_vars_assigments {
+                            l.set_negative();
                         }
                     }
                 }
+                self.update_or_free_vars_assignments_from(0.into());
             }
             Some(&self.model)
         } else {
             self.has_model = false;
             None
+        }
+    }
+
+    fn update_or_free_vars_assignments_from(&mut self, from: NodeIndex) {
+        match &self.ddnnf.nodes()[usize::from(from)] {
+            Node::And(edges) => {
+                for edge in edges {
+                    self.update_or_free_vars_assignments_from(
+                        self.ddnnf.edges()[usize::from(*edge)].target(),
+                    );
+                }
+            }
+            Node::Or(edges) => {
+                let selected_child_index = self.or_edge_indices[usize::from(from)];
+                for l in &mut self.or_free_vars_assignments[usize::from(from)][selected_child_index]
+                {
+                    *l = self.model[l.var_index()].unwrap();
+                }
+                self.update_or_free_vars_assignments_from(
+                    self.ddnnf.edges()[edges[selected_child_index]].target(),
+                );
+            }
+            Node::True | Node::False => {}
         }
     }
 
@@ -380,6 +395,7 @@ mod tests {
     ) {
         let mut model_enum = ModelEnumerator::new(ddnnf, hide_free_vars);
         model_enum.jump_to(direct_access_engine, model_id.into());
+        println!("model_enum after jump {model_id}: {model_enum:?}");
         let mut actual = Vec::new();
         while let Some(m) = model_enum.compute_next_model() {
             actual.push(
@@ -516,6 +532,31 @@ mod tests {
             1 2 1 2 0
             ",
             &[vec![-1, -2], vec![1, 2]],
+            None,
+            false,
+        );
+    }
+
+    #[test]
+    fn test_jump_sets_unassigned_or_free_vars_negatively() {
+        assert_models_eq(
+            r"o 1 0
+            o 2 0
+            t 3 0
+            o 4 0
+            4 3 -1 0
+            4 3 1 3 0
+            2 3 -2 3 0
+            2 4 2 0
+            1 2 0
+            ",
+            &[
+                vec![-1, -2, 3],
+                vec![1, -2, 3],
+                vec![-1, 2, -3],
+                vec![-1, 2, 3],
+                vec![1, 2, 3],
+            ],
             None,
             false,
         );

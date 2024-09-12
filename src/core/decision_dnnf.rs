@@ -51,6 +51,13 @@ impl Literal {
     pub fn flip(&self) -> Literal {
         Literal(self.0 ^ 1)
     }
+
+    /// Sets the current literal polarity to false.
+    ///
+    /// This has no effect if the literal has already a false polarity.
+    pub fn set_negative(&mut self) {
+        self.0 |= 1;
+    }
 }
 
 impl From<isize> for Literal {

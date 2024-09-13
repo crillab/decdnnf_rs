@@ -1,6 +1,6 @@
 use crate::{
     core::{EdgeIndex, Node, NodeIndex},
-    DecisionDNNF, DirectAccessEngine, Literal, ModelCounter,
+    DecisionDNNF, DirectAccessEngine, Literal, ModelCounter, OrFreeVariables,
 };
 use rug::Integer;
 
@@ -82,7 +82,7 @@ use rug::Integer;
 pub struct ModelEnumerator<'a> {
     ddnnf: &'a DecisionDNNF,
     or_edge_indices: Vec<usize>,
-    or_free_vars_assignments: Vec<Vec<Vec<Literal>>>,
+    or_free_vars_assignments: OrFreeVariables,
     root_free_vars_assignment: Vec<Literal>,
     first_computed: bool,
     model: Vec<Option<Literal>>,
@@ -100,16 +100,8 @@ impl<'a> ModelEnumerator<'a> {
     pub fn new(ddnnf: &'a DecisionDNNF, elude_free_vars: bool) -> Self {
         let n_nodes = ddnnf.nodes().as_slice().len();
         let free_vars = ddnnf.free_vars();
-        let mut root_free_vars_assignment = free_vars.root_free_vars().to_vec();
-        let mut or_free_vars_assignments = free_vars.or_free_vars().to_vec();
-        for node_free_vars in &mut or_free_vars_assignments {
-            for child_free_vars in node_free_vars.iter_mut() {
-                child_free_vars.iter_mut().for_each(|l| *l = l.flip());
-            }
-        }
-        root_free_vars_assignment
-            .iter_mut()
-            .for_each(|l| *l = l.flip());
+        let root_free_vars_assignment = free_vars.root_free_vars().to_vec();
+        let or_free_vars_assignments = free_vars.or_free_vars().clone();
         let mut model = vec![None; ddnnf.n_vars()];
         Self::update_model_with_propagations(
             &mut model,
@@ -154,13 +146,7 @@ impl<'a> ModelEnumerator<'a> {
                 for l in &mut self.root_free_vars_assignment {
                     *l = self.model[l.var_index()].unwrap();
                 }
-                for or_children_free_vars_assignments in &mut self.or_free_vars_assignments {
-                    for edge_free_vars_assigments in or_children_free_vars_assignments {
-                        for l in edge_free_vars_assigments {
-                            l.set_negative();
-                        }
-                    }
-                }
+                self.or_free_vars_assignments.set_negative_literals();
                 self.update_or_free_vars_assignments_from(0.into());
             }
             Some(&self.model)
@@ -181,7 +167,9 @@ impl<'a> ModelEnumerator<'a> {
             }
             Node::Or(edges) => {
                 let selected_child_index = self.or_edge_indices[usize::from(from)];
-                for l in &mut self.or_free_vars_assignments[usize::from(from)][selected_child_index]
+                for l in self
+                    .or_free_vars_assignments
+                    .child_free_vars_mut(usize::from(from), selected_child_index)
                 {
                     *l = self.model[l.var_index()].unwrap();
                 }
@@ -271,7 +259,8 @@ impl<'a> ModelEnumerator<'a> {
     ) -> bool {
         Self::next_free_vars_interpretation(
             &mut self.model,
-            &mut self.or_free_vars_assignments[usize::from(or_node)][child_index],
+            self.or_free_vars_assignments
+                .child_free_vars_mut(usize::from(or_node), child_index),
             self.elude_free_vars,
         )
     }
@@ -327,8 +316,10 @@ impl<'a> ModelEnumerator<'a> {
 
     fn update_or_edge(&mut self, or_node_index: NodeIndex, edge_index: EdgeIndex) -> bool {
         let edge = &self.ddnnf.edges()[edge_index];
-        let or_free_vars = &self.or_free_vars_assignments[usize::from(or_node_index)]
-            [self.or_edge_indices[usize::from(or_node_index)]];
+        let or_free_vars = self.or_free_vars_assignments.child_free_vars(
+            usize::from(or_node_index),
+            self.or_edge_indices[usize::from(or_node_index)],
+        );
         Self::update_model_with_propagations(&mut self.model, or_free_vars, self.elude_free_vars);
         Self::update_model_with_propagations(&mut self.model, edge.propagated(), false);
         self.first_path_from(edge.target())

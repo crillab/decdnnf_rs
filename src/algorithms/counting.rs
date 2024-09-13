@@ -34,9 +34,9 @@ impl<'a> ModelCounter<'a> {
             ddnnf,
             free_variables.root_free_vars(),
             &|index| {
-                free_variables.or_free_vars()[usize::from(index)]
-                    .iter()
-                    .map(Vec::len)
+                free_variables
+                    .or_free_vars()
+                    .iter_child_free_vars_lengths(usize::from(index))
             },
             NodeIndex::from(0),
             &mut n_models,

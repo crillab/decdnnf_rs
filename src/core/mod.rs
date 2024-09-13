@@ -12,6 +12,7 @@ pub use decision_dnnf::NodeIndex;
 
 mod free_variables;
 pub use free_variables::FreeVariables;
+pub use free_variables::OrFreeVariables;
 
 mod involved_vars;
 pub(crate) use involved_vars::InvolvedVars;

@@ -114,21 +114,25 @@ where
                 }
             }
             Node::Or(edges) => {
-                let free_vars = &self.ddnnf().free_vars().or_free_vars()[usize::from(index)];
                 for (i, edge) in edges.iter().enumerate() {
                     let edge = &self.counter.ddnnf().edges()[*edge];
                     let target = edge.target();
                     let child_n_models = self.counter.count_from(target);
+                    let child_free_vars = self
+                        .ddnnf()
+                        .free_vars()
+                        .or_free_vars()
+                        .child_free_vars(usize::from(index), i);
                     let total_child_n_models = if self.elude_free_vars {
                         Integer::from(child_n_models)
                     } else {
-                        Integer::from(child_n_models << free_vars[i].len())
+                        Integer::from(child_n_models << child_free_vars.len())
                     };
                     if n < total_child_n_models {
                         update_model_with_free_vars(
                             model,
                             &mut n,
-                            &free_vars[i],
+                            child_free_vars,
                             self.elude_free_vars,
                         );
                         on_or_child_selection(index, i);
@@ -164,9 +168,9 @@ fn update_model_with_free_vars(
         if update_with_none {
             model[v.var_index()] = None;
         } else if n.get_bit(i as u32) {
-            model[v.var_index()] = Some(*v);
-        } else {
             model[v.var_index()] = Some(v.flip());
+        } else {
+            model[v.var_index()] = Some(*v);
         }
     }
     if !update_with_none {

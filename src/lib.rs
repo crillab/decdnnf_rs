@@ -16,6 +16,7 @@ pub use core::BottomUpVisitor;
 pub use core::DecisionDNNF;
 pub use core::FreeVariables;
 pub use core::Literal;
+pub use core::OrFreeVariables;
 
 mod io;
 pub use io::C2dWriter;

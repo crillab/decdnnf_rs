@@ -51,13 +51,13 @@ impl InvolvedVars {
     pub fn iter_missing_literals(&self) -> impl Iterator<Item = Literal> + '_ {
         self.0
             .iter_zeros()
-            .map(|i| Literal::from(isize::try_from(i + 1).unwrap()))
+            .map(|i| Literal::from(-isize::try_from(i + 1).unwrap()))
     }
 
-    pub fn iter_pos_literals(&self) -> impl Iterator<Item = Literal> + '_ {
+    pub fn iter_neg_literals(&self) -> impl Iterator<Item = Literal> + '_ {
         self.0
             .iter_ones()
-            .map(|i| Literal::from(isize::try_from(i + 1).unwrap()))
+            .map(|i| Literal::from(-isize::try_from(i + 1).unwrap()))
     }
 
     pub fn any(&self) -> bool {

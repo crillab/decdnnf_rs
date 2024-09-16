@@ -1,6 +1,6 @@
 use crate::{
     core::{EdgeIndex, Node, NodeIndex},
-    DecisionDNNF, DirectAccessEngine, Literal, ModelCounter, OrFreeVariables,
+    DecisionDNNF, DirectAccessEngine, Literal, OrFreeVariables,
 };
 use rug::Integer;
 
@@ -129,7 +129,7 @@ impl<'a> ModelEnumerator<'a> {
     /// This function panics if the [`DirectAccessEngine`] does not refer to the same [`DecisionDNNF`] than this object.
     pub fn jump_to(
         &mut self,
-        direct_access_engine: &DirectAccessEngine<ModelCounter<'_>>,
+        direct_access_engine: &DirectAccessEngine,
         model_id: Integer,
     ) -> Option<&[Option<Literal>]> {
         assert!(
@@ -361,8 +361,8 @@ mod tests {
             );
         }
         assert_eq!(expected, actual);
-        let model_counter = ModelCounter::new(&ddnnf);
-        let direct_access = DirectAccessEngine::new_for_models(&model_counter);
+        let model_counter = ModelCounter::new(&ddnnf, false);
+        let direct_access = DirectAccessEngine::new(&model_counter);
         if hide_free_vars {
             return;
         }
@@ -381,7 +381,7 @@ mod tests {
         ddnnf: &DecisionDNNF,
         expected: &[Vec<isize>],
         hide_free_vars: bool,
-        direct_access_engine: &DirectAccessEngine<ModelCounter<'_>>,
+        direct_access_engine: &DirectAccessEngine,
         model_id: usize,
     ) {
         let mut model_enum = ModelEnumerator::new(ddnnf, hide_free_vars);

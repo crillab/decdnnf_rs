@@ -1,9 +1,7 @@
 use super::{common, model_writer::ModelWriter};
 use anyhow::Context;
 use crusti_app_helper::{info, App, AppSettings, Arg, SubCommand};
-use decdnnf_rs::{
-    Counter, DirectAccessEngine, Literal, ModelCounter, ModelEnumerator, ModelFinder,
-};
+use decdnnf_rs::{DirectAccessEngine, Literal, ModelCounter, ModelEnumerator, ModelFinder};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use rug::Integer;
 use std::{io::Write, sync::Mutex};
@@ -92,7 +90,8 @@ fn enum_default(arg_matches: &crusti_app_helper::ArgMatches<'_>) -> anyhow::Resu
 
 fn enum_default_parallel(arg_matches: &crusti_app_helper::ArgMatches<'_>) -> anyhow::Result<()> {
     let ddnnf = common::read_and_check_input_ddnnf(arg_matches)?;
-    let model_counter = ModelCounter::new(&ddnnf);
+    let compact_display = arg_matches.is_present(ARG_COMPACT_FREE_VARS);
+    let model_counter = ModelCounter::new(&ddnnf, compact_display);
     let n_models = model_counter.global_count();
     let next_min_bound = Mutex::new(Integer::ZERO);
     let writers_n_enumerated = Mutex::new(Integer::ZERO);
@@ -102,12 +101,11 @@ fn enum_default_parallel(arg_matches: &crusti_app_helper::ArgMatches<'_>) -> any
     (0..n_threads).into_par_iter().for_each(|_| {
         let mut model_writer = ModelWriter::new_unlocked(
             ddnnf.n_vars(),
-            arg_matches.is_present(ARG_COMPACT_FREE_VARS),
+            compact_display,
             arg_matches.is_present(ARG_DO_NOT_PRINT),
         );
-        let mut model_iterator =
-            ModelEnumerator::new(&ddnnf, arg_matches.is_present(ARG_COMPACT_FREE_VARS));
-        let direct_access_engine = DirectAccessEngine::new_for_models(&model_counter);
+        let mut model_iterator = ModelEnumerator::new(&ddnnf, compact_display);
+        let direct_access_engine = DirectAccessEngine::new(&model_counter);
         loop {
             let mut lock = next_min_bound.lock().unwrap();
             let mut min_bound = lock.clone();
@@ -138,7 +136,7 @@ fn enum_default_parallel(arg_matches: &crusti_app_helper::ArgMatches<'_>) -> any
         *writers_n_models.lock().unwrap() += model_writer.n_models();
     });
     write_summary_for(
-        arg_matches.is_present(ARG_COMPACT_FREE_VARS),
+        compact_display,
         &writers_n_enumerated.lock().unwrap(),
         &writers_n_models.lock().unwrap(),
     );

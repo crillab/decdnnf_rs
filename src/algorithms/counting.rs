@@ -11,10 +11,10 @@ use rug::Integer;
 /// # Example
 ///
 /// ```
-/// use decdnnf_rs::{Counter, DecisionDNNF, ModelCounter};
+/// use decdnnf_rs::{DecisionDNNF, ModelCounter};
 ///
 /// fn count_models(ddnnf: &DecisionDNNF) {
-///     let model_counter = ModelCounter::new(ddnnf);
+///     let model_counter = ModelCounter::new(ddnnf, false);
 ///     println!("the formula has {} models", model_counter.global_count());
 /// }
 /// # count_models(&decdnnf_rs::D4Reader::read("t 1 0".as_bytes()).unwrap())
@@ -22,105 +22,77 @@ use rug::Integer;
 pub struct ModelCounter<'a> {
     ddnnf: &'a DecisionDNNF,
     n_models: Vec<Option<Integer>>,
+    partial_models: bool,
 }
 
 impl<'a> ModelCounter<'a> {
     /// Builds a new model counter given a formula.
+    ///
+    /// This function can both count the number of full or partial models.
     #[must_use]
-    pub fn new(ddnnf: &'a DecisionDNNF) -> Self {
+    pub fn new(ddnnf: &'a DecisionDNNF, partial_models: bool) -> Self {
         let mut n_models = vec![None; ddnnf.nodes().as_slice().len()];
         let free_variables = ddnnf.free_vars();
-        compute_models_from(
+        if partial_models {
+            compute_models_from(
+                ddnnf,
+                &[],
+                &|index| match &ddnnf.nodes()[usize::from(index)] {
+                    Node::Or(children) => std::iter::repeat(0).take(children.len()),
+                    _ => unreachable!(),
+                },
+                NodeIndex::from(0),
+                &mut n_models,
+            );
+        } else {
+            compute_models_from(
+                ddnnf,
+                free_variables.root_free_vars(),
+                &|index| {
+                    free_variables
+                        .or_free_vars()
+                        .iter_child_free_vars_lengths(usize::from(index))
+                },
+                NodeIndex::from(0),
+                &mut n_models,
+            );
+        }
+        Self {
             ddnnf,
-            free_variables.root_free_vars(),
-            &|index| {
-                free_variables
-                    .or_free_vars()
-                    .iter_child_free_vars_lengths(usize::from(index))
-            },
-            NodeIndex::from(0),
-            &mut n_models,
-        );
-        Self { ddnnf, n_models }
+            n_models,
+            partial_models,
+        }
     }
-}
 
-/// A structure used to count the paths of a [`DecisionDNNF`].
-///
-/// The algorithm takes a time polynomial in the size of the Decision-DNNF.
-///
-/// # Example
-///
-/// ```
-/// use decdnnf_rs::{Counter, DecisionDNNF, PathCounter};
-///
-/// fn count_paths(ddnnf: &DecisionDNNF) {
-///     let path_counter = PathCounter::new(ddnnf);
-///     println!("the formula has {} paths", path_counter.global_count());
-/// }
-/// # count_paths(&decdnnf_rs::D4Reader::read("t 1 0".as_bytes()).unwrap())
-/// ```
-pub struct PathCounter<'a> {
-    ddnnf: &'a DecisionDNNF,
-    n_models: Vec<Option<Integer>>,
-}
-
-impl<'a> PathCounter<'a> {
-    /// Builds a new path counter given a formula.
-    #[must_use]
-    pub fn new(ddnnf: &'a DecisionDNNF) -> Self {
-        let mut n_models = vec![None; ddnnf.nodes().as_slice().len()];
-        compute_models_from(
-            ddnnf,
-            &[],
-            &|index| match &ddnnf.nodes()[usize::from(index)] {
-                Node::Or(children) => std::iter::repeat(0).take(children.len()),
-                _ => unreachable!(),
-            },
-            NodeIndex::from(0),
-            &mut n_models,
-        );
-        Self { ddnnf, n_models }
-    }
-}
-
-/// A trait for objects that count models or paths of a Decision-DNNF.
-///
-/// This trait provides function allowing to get the count for a whole formula, or for a subformula.
-pub trait Counter {
     /// Returns the number of counted elements of the whole formula.
     #[must_use]
-    fn global_count(&self) -> &Integer;
-
-    /// Returns the number of counted elements of the subfomula rooted at the node which index is given.
-    #[must_use]
-    fn count_from(&self, index: NodeIndex) -> &Integer;
+    #[allow(clippy::missing_panics_doc)]
+    pub fn global_count(&self) -> &Integer {
+        self.n_models[0].as_ref().unwrap()
+    }
 
     /// Returns the [`DecisionDNNF`] which elements are counted.
     #[must_use]
-    fn ddnnf(&self) -> &DecisionDNNF;
+    pub fn ddnnf(&self) -> &DecisionDNNF {
+        self.ddnnf
+    }
+
+    /// Returns the number of counted elements of the subfomula rooted at the node which index is given.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if the provided node index is greater or equal to the number of nodes of the formula.
+    #[must_use]
+    pub fn count_from(&self, index: NodeIndex) -> &Integer {
+        self.n_models[usize::from(index)].as_ref().unwrap()
+    }
+
+    /// Returns a Boolean value indicating if partial models are computed (`false` is returns in case full models are computed).
+    #[must_use]
+    pub fn partial_models(&self) -> bool {
+        self.partial_models
+    }
 }
-
-macro_rules! counter_impl {
-    ($type: ty) => {
-        impl Counter for $type {
-            fn global_count(&self) -> &Integer {
-                self.n_models[0].as_ref().unwrap()
-            }
-
-            fn ddnnf(&self) -> &DecisionDNNF {
-                self.ddnnf
-            }
-
-            fn count_from(&self, index: NodeIndex) -> &Integer {
-                self.n_models[usize::from(index)].as_ref().unwrap()
-            }
-        }
-    };
-}
-
-counter_impl!(ModelCounter<'_>);
-counter_impl!(PathCounter<'_>);
 
 fn compute_models_from<'a, F, G>(
     ddnnf: &'a DecisionDNNF,
@@ -186,12 +158,12 @@ mod tests {
         if let Some(n) = n_vars {
             ddnnf.update_n_vars(n);
         }
-        let model_counter = ModelCounter::new(&ddnnf);
+        let model_counter = ModelCounter::new(&ddnnf, false);
         assert_eq!(
             expected_model_count,
             model_counter.global_count().to_usize_wrapping()
         );
-        let path_counter = PathCounter::new(&ddnnf);
+        let path_counter = ModelCounter::new(&ddnnf, true);
         assert_eq!(
             expected_path_count,
             path_counter.global_count().to_usize_wrapping()

@@ -1,64 +1,43 @@
 use crate::{
     core::{Node, NodeIndex},
-    Counter, DecisionDNNF, Literal, ModelCounter, PathCounter,
+    DecisionDNNF, Literal, ModelCounter,
 };
 use rug::Integer;
 
 /// An object that, given an (internally computed) complete order on the models of a [`DecisionDNNF`], allows to return the k-th model.
-pub struct DirectAccessEngine<'a, T>
-where
-    T: Counter,
-{
-    counter: &'a T,
-    elude_free_vars: bool,
+pub struct DirectAccessEngine<'a> {
+    model_counter: &'a ModelCounter<'a>,
 }
 
-impl<'a> DirectAccessEngine<'a, ModelCounter<'a>> {
+impl<'a> DirectAccessEngine<'a> {
     /// Builds a new [`DirectAccessEngine`] given a [`ModelCounter`].
+    ///
     /// The formula under consideration is the one of the model counter.
     #[must_use]
-    pub fn new_for_models(model_counter: &'a ModelCounter<'a>) -> Self {
-        Self {
-            counter: model_counter,
-            elude_free_vars: false,
-        }
+    pub fn new(model_counter: &'a ModelCounter<'a>) -> Self {
+        Self { model_counter }
     }
 }
 
-impl<'a> DirectAccessEngine<'a, PathCounter<'a>> {
-    /// Builds a new [`DirectAccessEngine`] given a [`PathCounter`].
-    /// The formula under consideration is the one of the model counter.
-    #[must_use]
-    pub fn new_for_partial_models(path_counter: &'a PathCounter<'a>) -> Self {
-        Self {
-            counter: path_counter,
-            elude_free_vars: true,
-        }
-    }
-}
-
-impl<'a, T> DirectAccessEngine<'a, T>
-where
-    T: Counter,
-{
+impl<'a> DirectAccessEngine<'a> {
     /// Returns the number of models of the formula.
     #[must_use]
     pub fn n_models(&self) -> &Integer {
-        self.counter.global_count()
+        self.model_counter.global_count()
     }
 
     /// Returns the model at the given index.
     #[must_use]
     pub fn model(&self, mut n: Integer) -> Option<Vec<Option<Literal>>> {
-        if n >= *self.counter.global_count() {
+        if n >= *self.model_counter.global_count() {
             return None;
         }
-        let mut model = vec![None; self.counter.ddnnf().n_vars()];
+        let mut model = vec![None; self.model_counter.ddnnf().n_vars()];
         update_model_with_free_vars(
             &mut model,
             &mut n,
             self.ddnnf().free_vars().root_free_vars(),
-            self.elude_free_vars,
+            self.model_counter.partial_models(),
         );
         self.build_model_from(&mut model, n, NodeIndex::from(0), &mut |_, _| {});
         Some(model)
@@ -69,16 +48,16 @@ where
     /// If the index is higher than the number of models, [`None`] is returned.
     #[must_use]
     pub fn model_with_graph(&self, mut n: Integer) -> Option<(Vec<Option<Literal>>, Vec<usize>)> {
-        if n >= *self.counter.global_count() {
+        if n >= *self.model_counter.global_count() {
             return None;
         }
-        let mut model = vec![None; self.counter.ddnnf().n_vars()];
-        let mut model_graph = vec![0; self.counter.ddnnf().nodes().as_slice().len()];
+        let mut model = vec![None; self.model_counter.ddnnf().n_vars()];
+        let mut model_graph = vec![0; self.model_counter.ddnnf().nodes().as_slice().len()];
         update_model_with_free_vars(
             &mut model,
             &mut n,
             self.ddnnf().free_vars().root_free_vars(),
-            self.elude_free_vars,
+            self.model_counter.partial_models(),
         );
         self.build_model_from(
             &mut model,
@@ -100,30 +79,30 @@ where
     ) where
         F: FnMut(NodeIndex, usize),
     {
-        match &self.counter.ddnnf().nodes()[index] {
+        match &self.model_counter.ddnnf().nodes()[index] {
             Node::And(edges) => {
                 for edge in edges.iter().rev() {
-                    let edge = &self.counter.ddnnf().edges()[*edge];
+                    let edge = &self.model_counter.ddnnf().edges()[*edge];
                     edge.propagated()
                         .iter()
                         .for_each(|p| model[p.var_index()] = Some(*p));
                     let target = edge.target();
-                    let mut child_n_models = self.counter.count_from(target).to_owned();
+                    let mut child_n_models = self.model_counter.count_from(target).to_owned();
                     n.div_rem_mut(&mut child_n_models);
                     self.build_model_from(model, child_n_models, target, on_or_child_selection);
                 }
             }
             Node::Or(edges) => {
                 for (i, edge) in edges.iter().enumerate() {
-                    let edge = &self.counter.ddnnf().edges()[*edge];
+                    let edge = &self.model_counter.ddnnf().edges()[*edge];
                     let target = edge.target();
-                    let child_n_models = self.counter.count_from(target);
+                    let child_n_models = self.model_counter.count_from(target);
                     let child_free_vars = self
                         .ddnnf()
                         .free_vars()
                         .or_free_vars()
                         .child_free_vars(usize::from(index), i);
-                    let total_child_n_models = if self.elude_free_vars {
+                    let total_child_n_models = if self.model_counter.partial_models() {
                         Integer::from(child_n_models)
                     } else {
                         Integer::from(child_n_models << child_free_vars.len())
@@ -133,7 +112,7 @@ where
                             model,
                             &mut n,
                             child_free_vars,
-                            self.elude_free_vars,
+                            self.model_counter.partial_models(),
                         );
                         on_or_child_selection(index, i);
                         edge.propagated()
@@ -153,7 +132,7 @@ where
     /// Returns the underlying ddnnf.
     #[must_use]
     pub fn ddnnf(&self) -> &DecisionDNNF {
-        self.counter.ddnnf()
+        self.model_counter.ddnnf()
     }
 }
 
@@ -199,24 +178,21 @@ mod tests {
             .into_iter()
             .zip(expected_graphs)
             .collect::<Vec<_>>();
-        let model_counter = ModelCounter::new(&ddnnf);
-        let engine = DirectAccessEngine::new_for_models(&model_counter);
+        let model_counter = ModelCounter::new(&ddnnf, false);
+        let engine = DirectAccessEngine::new(&model_counter);
         let actual_models = compute_models(&engine);
         assert_eq!(expected_models_with_graphs, actual_models);
         let expected_partial_models_with_graphs = expected_partial_models
             .into_iter()
             .zip(expected_partial_graphs)
             .collect::<Vec<_>>();
-        let path_counter = PathCounter::new(&ddnnf);
-        let engine = DirectAccessEngine::new_for_partial_models(&path_counter);
+        let path_counter = ModelCounter::new(&ddnnf, true);
+        let engine = DirectAccessEngine::new(&path_counter);
         let actual_partial_models = compute_models(&engine);
         assert_eq!(expected_partial_models_with_graphs, actual_partial_models);
     }
 
-    fn compute_models<T>(engine: &DirectAccessEngine<T>) -> Vec<(Vec<isize>, Vec<usize>)>
-    where
-        T: Counter,
-    {
+    fn compute_models(engine: &DirectAccessEngine) -> Vec<(Vec<isize>, Vec<usize>)> {
         let n_models = engine.n_models();
         let mut actual = Vec::with_capacity(n_models.to_usize_wrapping());
         for i in 0..n_models.to_usize_wrapping() {

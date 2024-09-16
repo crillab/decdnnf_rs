@@ -1,6 +1,6 @@
 use super::common;
 use crusti_app_helper::{App, AppSettings, SubCommand};
-use decdnnf_rs::{Counter, ModelCounter};
+use decdnnf_rs::ModelCounter;
 
 #[derive(Default)]
 pub struct Command;
@@ -23,7 +23,7 @@ impl<'a> crusti_app_helper::Command<'a> for Command {
 
     fn execute(&self, arg_matches: &crusti_app_helper::ArgMatches<'_>) -> anyhow::Result<()> {
         let ddnnf = common::read_and_check_input_ddnnf(arg_matches)?;
-        let model_counter = ModelCounter::new(&ddnnf);
+        let model_counter = ModelCounter::new(&ddnnf, false);
         println!("{}", model_counter.global_count());
         Ok(())
     }

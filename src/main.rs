@@ -18,13 +18,17 @@ pub(crate) fn create_app_helper() -> AppHelper<'static> {
         authors,
         "decdnnf-rs, a library for Decision-DNNFs.",
     );
-    let commands: Vec<Box<dyn Command>> = vec![
+    #[allow(unused_mut)]
+    let mut commands: Vec<Box<dyn Command>> = vec![
         Box::<ModelComputerCommand>::default(),
         Box::<ModelCountingCommand>::default(),
         Box::<ModelEnumerationCommand>::default(),
         Box::<SamplingCommand>::default(),
         Box::<TranslationCommand>::default(),
     ];
+    if cfg!(feature = "mpi") {
+        commands.push(Box::<app::ModelEnumerationMPICommand>::default());
+    }
     for c in commands {
         app.add_command(c);
     }

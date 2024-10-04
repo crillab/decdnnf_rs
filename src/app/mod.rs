@@ -9,6 +9,11 @@ pub(crate) use model_counting::Command as ModelCountingCommand;
 mod model_enumeration;
 pub(crate) use model_enumeration::Command as ModelEnumerationCommand;
 
+#[cfg(feature = "mpi")]
+mod model_enumeration_mpi;
+#[cfg(feature = "mpi")]
+pub(crate) use model_enumeration_mpi::Command as ModelEnumerationMPICommand;
+
 mod model_writer;
 
 mod sampling;

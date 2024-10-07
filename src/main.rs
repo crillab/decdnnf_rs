@@ -26,9 +26,8 @@ pub(crate) fn create_app_helper() -> AppHelper<'static> {
         Box::<SamplingCommand>::default(),
         Box::<TranslationCommand>::default(),
     ];
-    if cfg!(feature = "mpi") {
-        commands.push(Box::<app::ModelEnumerationMPICommand>::default());
-    }
+    #[cfg(feature = "mpi")]
+    commands.push(Box::<app::ModelEnumerationMPICommand>::default());
     for c in commands {
         app.add_command(c);
     }

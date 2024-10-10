@@ -1,4 +1,4 @@
-use super::{common, model_writer::ModelWriter};
+use super::{common, model_enumeration, model_writer::ModelWriter};
 use anyhow::anyhow;
 use crusti_app_helper::{info, App, AppSettings, Arg, SubCommand};
 use decdnnf_rs::{DirectAccessEngine, ModelCounter, ModelEnumerator};
@@ -29,24 +29,13 @@ impl<'a> crusti_app_helper::Command<'a> for Command {
 
     fn clap_subcommand(&self) -> App<'a, 'a> {
         SubCommand::with_name(CMD_NAME)
-            .about("enumerates the models of the formula")
+            .about("enumerates the models of the formula using MPI")
             .setting(AppSettings::DisableVersion)
             .arg(common::arg_input_var())
             .arg(common::arg_n_vars())
             .arg(crusti_app_helper::logging_level_cli_arg())
-            .arg(
-                Arg::with_name(ARG_COMPACT_FREE_VARS)
-                    .short("c")
-                    .long("compact-free-vars")
-                    .takes_value(false)
-                    .help("compact models with free variables"),
-            )
-            .arg(
-                Arg::with_name(ARG_DO_NOT_PRINT)
-                    .long("do-not-print")
-                    .takes_value(false)
-                    .help("do not print the models (for testing purpose)"),
-            )
+            .arg(model_enumeration::arg_compact_free_vars())
+            .arg(model_enumeration::arg_do_not_print())
             .arg(
                 Arg::with_name(ARG_MPI)
                     .long("mpi")
@@ -69,7 +58,8 @@ fn enum_default_mpi(arg_matches: &crusti_app_helper::ArgMatches<'_>) -> anyhow::
     let world = universe.world();
     let current_rank = world.rank();
     let n_ranks = world.size();
-    info!("MPI rank {current_rank} out of {}", n_ranks - 1);
+    info!("MPI number of ranks: {n_ranks}");
+    info!("MPI current rank {current_rank}");
     if n_ranks < 2 {
         return Err(anyhow!("number of ranks must be at least 2"));
     }
@@ -119,7 +109,7 @@ fn master_worker(
         send_serializable(current_world, sender, &min_bound, MPI_TAG_BOUND);
         send_serializable(current_world, sender, &next_min_bound, MPI_TAG_BOUND);
     }
-    write_summary_for(
+    model_enumeration::write_summary_for(
         arg_matches.is_present(ARG_COMPACT_FREE_VARS),
         &workers_n_enumerated,
         &workers_n_models,
@@ -195,15 +185,4 @@ where
         .receive_into_with_tag(&mut buffer, tag);
     let buffer_content: &[u8] = buffer.downcast().unwrap();
     bincode::deserialize_from(buffer_content).unwrap()
-}
-
-fn write_summary_for(compact_display: bool, n_enumerated: &Integer, n_models: &Integer) {
-    if compact_display {
-        info!(
-            "enumerated {} compact models corresponding to {} models",
-            n_enumerated, n_models
-        );
-    } else {
-        info!("enumerated {} models", n_enumerated);
-    }
 }

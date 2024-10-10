@@ -30,13 +30,7 @@ impl<'a> crusti_app_helper::Command<'a> for Command {
             .arg(common::arg_input_var())
             .arg(common::arg_n_vars())
             .arg(crusti_app_helper::logging_level_cli_arg())
-            .arg(
-                Arg::with_name(ARG_COMPACT_FREE_VARS)
-                    .short("c")
-                    .long("compact-free-vars")
-                    .takes_value(false)
-                    .help("compact models with free variables"),
-            )
+            .arg(arg_compact_free_vars())
             .arg(
                 Arg::with_name(ARG_DECISION_TREE)
                     .long("decision-tree")
@@ -44,12 +38,7 @@ impl<'a> crusti_app_helper::Command<'a> for Command {
                     .conflicts_with(ARG_COMPACT_FREE_VARS)
                     .help("enumerate by building a decision tree (should be less efficient)"),
             )
-            .arg(
-                Arg::with_name(ARG_DO_NOT_PRINT)
-                    .long("do-not-print")
-                    .takes_value(false)
-                    .help("do not print the models (for testing purpose)"),
-            )
+            .arg(arg_do_not_print())
             .arg(
                 Arg::with_name(ARG_THREADS)
                     .short("t")
@@ -69,6 +58,21 @@ impl<'a> crusti_app_helper::Command<'a> for Command {
             enum_default(arg_matches)
         }
     }
+}
+
+pub(crate) fn arg_compact_free_vars<'a>() -> Arg<'a, 'a> {
+    Arg::with_name(ARG_COMPACT_FREE_VARS)
+        .short("c")
+        .long("compact-free-vars")
+        .takes_value(false)
+        .help("compact models with free variables")
+}
+
+pub(crate) fn arg_do_not_print<'a>() -> Arg<'a, 'a> {
+    Arg::with_name(ARG_DO_NOT_PRINT)
+        .long("do-not-print")
+        .takes_value(false)
+        .help("do not print the models (for testing purpose)")
 }
 
 fn enum_default(arg_matches: &crusti_app_helper::ArgMatches<'_>) -> anyhow::Result<()> {
@@ -205,7 +209,7 @@ where
     );
 }
 
-fn write_summary_for(compact_display: bool, n_enumerated: &Integer, n_models: &Integer) {
+pub(crate) fn write_summary_for(compact_display: bool, n_enumerated: &Integer, n_models: &Integer) {
     if compact_display {
         info!(
             "enumerated {} compact models corresponding to {} models",

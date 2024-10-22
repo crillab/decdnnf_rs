@@ -1,8 +1,7 @@
 #![doc = include_str!("../README.md")]
 
 mod algorithms;
-pub use algorithms::CheckingVisitor;
-pub use algorithms::CheckingVisitorData;
+pub use algorithms::DecisionDNNFChecker;
 pub use algorithms::ModelCountingVisitor;
 pub use algorithms::ModelCountingVisitorData;
 pub use algorithms::ModelEnumerator;

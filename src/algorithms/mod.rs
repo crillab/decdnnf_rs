@@ -1,6 +1,5 @@
 mod checker;
-pub use checker::CheckingVisitor;
-pub use checker::CheckingVisitorData;
+pub use checker::DecisionDNNFChecker;
 
 mod model_counter;
 pub use model_counter::ModelCountingVisitor;

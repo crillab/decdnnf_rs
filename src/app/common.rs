@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Context, Result};
 use clap::{Arg, ArgMatches};
-use decdnnf_rs::{CheckingVisitorData, D4Reader, DecisionDNNF, Literal};
+use decdnnf_rs::{D4Reader, DecisionDNNF, DecisionDNNFChecker, Literal};
 use log::{info, warn};
 use std::{
     fs::{self, File},
@@ -63,11 +63,11 @@ pub(crate) fn print_dimacs_model(model: &[Literal]) {
     println!(" 0");
 }
 
-pub(crate) fn print_warnings_and_errors(checking_data: &CheckingVisitorData) -> anyhow::Result<()> {
-    for w in checking_data.get_warnings() {
+pub(crate) fn print_warnings_and_errors(checking_data: &DecisionDNNFChecker) -> anyhow::Result<()> {
+    for w in checking_data.warnings() {
         warn!("{w}");
     }
-    if let Some(e) = checking_data.get_error() {
+    if let Some(e) = checking_data.error() {
         Err(anyhow!("{e}"))
     } else {
         Ok(())

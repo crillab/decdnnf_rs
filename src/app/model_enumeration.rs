@@ -1,8 +1,6 @@
 use super::{cli_manager, common};
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
-use decdnnf_rs::{
-    BottomUpTraversal, CheckingVisitor, DecisionDNNF, Literal, ModelEnumerator, ModelFinder,
-};
+use decdnnf_rs::{DecisionDNNF, DecisionDNNFChecker, Literal, ModelEnumerator, ModelFinder};
 use log::info;
 use rug::Integer;
 use std::io::{BufWriter, StdoutLock, Write};
@@ -127,9 +125,7 @@ fn enum_decision_tree(arg_matches: &ArgMatches<'_>) -> anyhow::Result<()> {
 
 fn load_ddnnf(arg_matches: &ArgMatches<'_>) -> anyhow::Result<DecisionDNNF> {
     let ddnnf = common::read_input_ddnnf(arg_matches)?;
-    let traversal_visitor = Box::<CheckingVisitor>::default();
-    let traversal_engine = BottomUpTraversal::new(traversal_visitor);
-    let checking_data = traversal_engine.traverse(&ddnnf);
+    let checking_data = DecisionDNNFChecker::check(&ddnnf);
     common::print_warnings_and_errors(&checking_data)?;
     Ok(ddnnf)
 }

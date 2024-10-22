@@ -18,7 +18,7 @@ use std::{
 /// It also checks that the described formula has a single root and no cycles.
 /// The index of the root must be 1. The root must be the first node that is described.
 /// The decomposability of the conjunction nodes and the determinism of the disjunction nodes are not check by this reader.
-/// See [`CheckingVisitor`](crate::CheckingVisitor) if you need to assert these properties.
+/// See [`DecisionDNNFChecker`](crate::DecisionDNNFChecker) if you need to assert these properties.
 pub struct Reader;
 
 impl Reader {
@@ -31,19 +31,16 @@ impl Reader {
     /// # Example
     ///
     /// ```
-    /// use decdnnf_rs::{BottomUpTraversal, CheckingVisitor, DecisionDNNF, D4Reader};
+    /// use decdnnf_rs::{BottomUpTraversal, ModelCountingVisitor, DecisionDNNF, D4Reader};
+    /// use rug::Integer;
     ///
-    /// fn load_decision_dnnf(str_ddnnf: &str) -> Result<DecisionDNNF, String> {
+    /// fn load_decision_dnnf_and_model_count(str_ddnnf: &str) -> Result<(DecisionDNNF, Integer), String> {
     ///     let ddnnf = D4Reader::read(str_ddnnf.as_bytes()).map_err(|e| e.to_string())?;
-    ///     let traversal = BottomUpTraversal::new(Box::<CheckingVisitor>::default());
-    ///     let checker_result = traversal.traverse(&ddnnf);
-    ///     if let Some(e) = checker_result.get_error() {
-    ///         Err(e.to_string())
-    ///     } else {
-    ///         Ok(ddnnf)
-    ///     }
+    ///     let traversal = BottomUpTraversal::new(Box::<ModelCountingVisitor>::default());
+    ///     let mc_data = traversal.traverse(&ddnnf);
+    ///     Ok((ddnnf, mc_data.n_models().clone()))
     /// }
-    /// # load_decision_dnnf("t 1 0").unwrap();
+    /// # load_decision_dnnf_and_model_count("t 1 0").unwrap();
     /// ```
     pub fn read<R>(reader: R) -> Result<DecisionDNNF>
     where
@@ -215,14 +212,13 @@ impl D4FormatReaderData {
         seen_on_path: &mut [bool],
         node_index: NodeIndex,
     ) -> Result<()> {
-        let add_to_seen_on_path = |i: NodeIndex, sop: &mut [bool]| {
-            if sop[usize::from(i)] {
-                return Err(anyhow!("cycle detected"));
-            }
-            sop[usize::from(i)] = true;
-            Ok(())
-        };
-        add_to_seen_on_path(node_index, seen_on_path)?;
+        if seen_on_path[usize::from(node_index)] {
+            return Err(anyhow!("cycle detected"));
+        }
+        if seen_once[usize::from(node_index)] {
+            return Ok(());
+        }
+        seen_on_path[usize::from(node_index)] = true;
         seen_once[usize::from(node_index)] = true;
         match &self.nodes[usize::from(node_index)] {
             Node::And(v) | Node::Or(v) => {

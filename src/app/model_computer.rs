@@ -3,7 +3,8 @@ use super::common;
 use clap::App;
 use clap::ArgMatches;
 use clap::{AppSettings, Arg, SubCommand};
-use decdnnf_rs::{BottomUpTraversal, CheckingVisitor, Literal, ModelFinder};
+use decdnnf_rs::DecisionDNNFChecker;
+use decdnnf_rs::{Literal, ModelFinder};
 
 #[derive(Default)]
 pub struct Command;
@@ -37,9 +38,7 @@ impl<'a> super::command::Command<'a> for Command {
 
     fn execute(&self, arg_matches: &ArgMatches<'_>) -> anyhow::Result<()> {
         let ddnnf = common::read_input_ddnnf(arg_matches)?;
-        let traversal_visitor = Box::<CheckingVisitor>::default();
-        let traversal_engine = BottomUpTraversal::new(traversal_visitor);
-        let checking_data = traversal_engine.traverse(&ddnnf);
+        let checking_data = DecisionDNNFChecker::check(&ddnnf);
         common::print_warnings_and_errors(&checking_data)?;
         let assumptions = if let Some(str_assumptions) = arg_matches.value_of(ARG_ASSUMPTIONS) {
             str_assumptions

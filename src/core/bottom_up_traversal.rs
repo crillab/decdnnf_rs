@@ -12,20 +12,15 @@ use crate::{DecisionDNNF, Literal};
 /// # Example
 ///
 /// ```
-/// use decdnnf_rs::{BottomUpTraversal, CheckingVisitor, DecisionDNNF};
+/// use decdnnf_rs::{BottomUpTraversal, ModelCountingVisitor, DecisionDNNF};
 ///
-/// fn check_ddnnf(ddnnf: &DecisionDNNF) {
-///     let checker_visitor = Box::<CheckingVisitor>::default();
+/// fn model_counting(ddnnf: &DecisionDNNF) {
+///     let checker_visitor = Box::<ModelCountingVisitor>::default();
 ///     let traversal_engine = BottomUpTraversal::new(checker_visitor);
-///     let checking_data = traversal_engine.traverse(&ddnnf);
-///     for w in checking_data.get_warnings() {
-///         println!("warning: {w}");
-///     }
-///     if let Some(e) = checking_data.get_error() {
-///         println!("error: {e}");
-///     }
+///     let mc_data = traversal_engine.traverse(&ddnnf);
+///     println!("formula has {} models", mc_data.n_models());
 /// }
-/// # check_ddnnf(&decdnnf_rs::D4Reader::read("t 1 0".as_bytes()).unwrap())
+/// # model_counting(&decdnnf_rs::D4Reader::read("t 1 0".as_bytes()).unwrap())
 /// ```
 pub struct BottomUpTraversal<T> {
     visitor: Box<dyn BottomUpVisitor<T>>,
@@ -113,29 +108,6 @@ impl<T> BottomUpTraversal<T> {
 }
 
 /// A Bottom-up visitor made to decorate a pair of underlying visitors.
-///
-/// # Example
-///
-/// ```
-/// use decdnnf_rs::{
-///     BiBottomUpVisitor, BottomUpTraversal, CheckingVisitor, DecisionDNNF, ModelCountingVisitor,
-/// };
-///
-/// fn check_and_count_models(ddnnf: &DecisionDNNF) {
-///     let traversal_visitor = BiBottomUpVisitor::new(
-///         Box::<CheckingVisitor>::default(),
-///         Box::<ModelCountingVisitor>::default(),
-///     );
-///     let traversal_engine = BottomUpTraversal::new(Box::new(traversal_visitor));
-///     let (checking_data, model_counting_data) = traversal_engine.traverse(&ddnnf);
-///     if let Some(e) = checking_data.get_error() {
-///         println!("error in the decision DNNF: {e}");
-///         return;
-///     }
-///     println!("the formula has {} models", model_counting_data.n_models());
-/// }
-/// # check_and_count_models(&decdnnf_rs::D4Reader::read("t 1 0".as_bytes()).unwrap())
-/// ```
 pub struct BiBottomUpVisitor<T, U> {
     visitor_t: Box<dyn BottomUpVisitor<T>>,
     visitor_u: Box<dyn BottomUpVisitor<U>>,

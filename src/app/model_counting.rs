@@ -1,6 +1,6 @@
 use super::{cli_manager, common};
 use clap::{App, AppSettings, ArgMatches, SubCommand};
-use decdnnf_rs::{BiBottomUpVisitor, BottomUpTraversal, CheckingVisitor, ModelCountingVisitor};
+use decdnnf_rs::{BottomUpTraversal, DecisionDNNFChecker, ModelCountingVisitor};
 
 #[derive(Default)]
 pub struct Command;
@@ -23,13 +23,10 @@ impl<'a> super::command::Command<'a> for Command {
 
     fn execute(&self, arg_matches: &ArgMatches<'_>) -> anyhow::Result<()> {
         let ddnnf = common::read_input_ddnnf(arg_matches)?;
-        let traversal_visitor = BiBottomUpVisitor::new(
-            Box::<CheckingVisitor>::default(),
-            Box::<ModelCountingVisitor>::default(),
-        );
-        let traversal_engine = BottomUpTraversal::new(Box::new(traversal_visitor));
-        let (checking_data, model_counting_data) = traversal_engine.traverse(&ddnnf);
+        let checking_data = DecisionDNNFChecker::check(&ddnnf);
         common::print_warnings_and_errors(&checking_data)?;
+        let traversal_engine = BottomUpTraversal::new(Box::<ModelCountingVisitor>::default());
+        let model_counting_data = traversal_engine.traverse(&ddnnf);
         println!("{}", model_counting_data.n_models());
         Ok(())
     }

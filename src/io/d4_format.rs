@@ -88,6 +88,9 @@ impl Reader {
             buffer.clear();
             *line_index.borrow_mut() += 1;
         }
+        if reader_data.nodes.is_empty() {
+            return Err(anyhow!("formula is empty"));
+        }
         reader_data.check_connectivity().context(context)?;
         Ok(DecisionDNNF::from_raw_data(
             reader_data.n_vars,
@@ -376,11 +379,16 @@ mod tests {
     }
 
     #[test]
-    fn test_empty_instance() {
+    fn test_true_instance() {
         let instance = "t 1 0";
         let ddnnf = Reader::read(&mut instance.as_bytes()).unwrap();
         assert_eq!(0, ddnnf.n_vars());
         assert_eq!(1, ddnnf.nodes().as_slice().len());
         assert_eq!(0, ddnnf.edges().as_slice().len());
+    }
+
+    #[test]
+    fn test_empty_instance() {
+        assert_error("", "formula is empty");
     }
 }

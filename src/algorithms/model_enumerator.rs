@@ -35,7 +35,7 @@ use crate::{
 ///         println!(" 0");
 ///     }
 /// }
-/// # print_models(&decdnnf_rs::D4Reader::read("t 1 0".as_bytes()).unwrap())
+/// # print_models(&decdnnf_rs::D4Reader::default().read("t 1 0".as_bytes()).unwrap())
 /// ```
 ///
 /// Free variables elusion:
@@ -44,7 +44,7 @@ use crate::{
 /// use decdnnf_rs::{D4Reader, Literal, ModelEnumerator};
 ///
 /// // A Decision-DNNF with two models: -1 2 and 1 2
-/// let ddnnf = D4Reader::read(r"
+/// let ddnnf = D4Reader::default().read(r"
 /// a 1 0
 /// t 2 0
 /// 1 2 2 0
@@ -343,7 +343,7 @@ mod tests {
             v.sort_unstable();
         };
         sort(&mut expected);
-        let mut ddnnf = D4Reader::read(str_ddnnf.as_bytes()).unwrap();
+        let mut ddnnf = D4Reader::default().read(str_ddnnf.as_bytes()).unwrap();
         if let Some(n) = n_vars {
             ddnnf.update_n_vars(n);
         }

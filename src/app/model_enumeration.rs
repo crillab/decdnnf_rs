@@ -1,6 +1,6 @@
 use super::{cli_manager, common};
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
-use decdnnf_rs::{DecisionDNNF, DecisionDNNFChecker, Literal, ModelEnumerator, ModelFinder};
+use decdnnf_rs::{Literal, ModelEnumerator, ModelFinder};
 use log::info;
 use rug::Integer;
 use std::io::{BufWriter, StdoutLock, Write};
@@ -23,8 +23,7 @@ impl<'a> super::command::Command<'a> for Command {
         SubCommand::with_name(CMD_NAME)
             .about("enumerates the models of the formula")
             .setting(AppSettings::DisableVersion)
-            .arg(common::arg_input_var())
-            .arg(common::arg_n_vars())
+            .args(&common::args_input())
             .arg(cli_manager::logging_level_cli_arg())
             .arg(
                 Arg::with_name(ARG_COMPACT_FREE_VARS)
@@ -58,7 +57,7 @@ impl<'a> super::command::Command<'a> for Command {
 }
 
 fn enum_default(arg_matches: &ArgMatches<'_>) -> anyhow::Result<()> {
-    let ddnnf = load_ddnnf(arg_matches)?;
+    let ddnnf = common::read_input_ddnnf(arg_matches)?;
     let mut model_writer = ModelWriter::new(
         ddnnf.n_vars(),
         arg_matches.is_present(ARG_COMPACT_FREE_VARS),
@@ -74,7 +73,7 @@ fn enum_default(arg_matches: &ArgMatches<'_>) -> anyhow::Result<()> {
 }
 
 fn enum_decision_tree(arg_matches: &ArgMatches<'_>) -> anyhow::Result<()> {
-    let ddnnf = load_ddnnf(arg_matches)?;
+    let ddnnf = common::read_input_ddnnf(arg_matches)?;
     let mut model_writer = ModelWriter::new(
         ddnnf.n_vars(),
         arg_matches.is_present(ARG_COMPACT_FREE_VARS),
@@ -121,13 +120,6 @@ fn enum_decision_tree(arg_matches: &ArgMatches<'_>) -> anyhow::Result<()> {
     }
     model_writer.finalize();
     Ok(())
-}
-
-fn load_ddnnf(arg_matches: &ArgMatches<'_>) -> anyhow::Result<DecisionDNNF> {
-    let ddnnf = common::read_input_ddnnf(arg_matches)?;
-    let checking_data = DecisionDNNFChecker::check(&ddnnf);
-    common::print_warnings_and_errors(&checking_data)?;
-    Ok(ddnnf)
 }
 
 struct ModelWriter {

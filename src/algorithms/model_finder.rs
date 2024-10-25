@@ -13,7 +13,7 @@ use crate::{
 /// ```
 /// use decdnnf_rs::{Literal, ModelFinder};
 ///
-/// # fn gimme_ddnnf() -> decdnnf_rs::DecisionDNNF {let mut r = decdnnf_rs::D4Reader::read("t 1 0".as_bytes()).unwrap(); r.update_n_vars(1); r}
+/// # fn gimme_ddnnf() -> decdnnf_rs::DecisionDNNF {let mut r = decdnnf_rs::D4Reader::default().read("t 1 0".as_bytes()).unwrap(); r.update_n_vars(1); r}
 /// let ddnnf = gimme_ddnnf();
 /// let model_finder = ModelFinder::new(&ddnnf);
 /// if let Some(model) = model_finder.find_model() {
@@ -193,7 +193,7 @@ mod tests {
         assumptions: &[isize],
         n_vars: Option<usize>,
     ) -> Option<Vec<isize>> {
-        let mut ddnnf = D4Reader::read(str_ddnnf.as_bytes()).unwrap();
+        let mut ddnnf = D4Reader::default().read(str_ddnnf.as_bytes()).unwrap();
         if let Some(n) = n_vars {
             ddnnf.update_n_vars(n);
         }

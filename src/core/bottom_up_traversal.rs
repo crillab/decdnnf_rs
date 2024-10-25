@@ -20,7 +20,7 @@ use crate::{DecisionDNNF, Literal};
 ///     let mc_data = traversal_engine.traverse(&ddnnf);
 ///     println!("formula has {} models", mc_data.n_models());
 /// }
-/// # model_counting(&decdnnf_rs::D4Reader::read("t 1 0".as_bytes()).unwrap())
+/// # model_counting(&decdnnf_rs::D4Reader::default().read("t 1 0".as_bytes()).unwrap())
 /// ```
 pub struct BottomUpTraversal<T> {
     visitor: Box<dyn BottomUpVisitor<T>>,

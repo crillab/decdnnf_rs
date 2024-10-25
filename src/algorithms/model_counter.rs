@@ -18,7 +18,7 @@ use rug::Integer;
 ///     let result = traversal.traverse(&ddnnf);
 ///     println!("the formula has {} models", result.n_models());
 /// }
-/// # check_decision_dnnf(&decdnnf_rs::D4Reader::read("t 1 0".as_bytes()).unwrap())
+/// # check_decision_dnnf(&decdnnf_rs::D4Reader::default().read("t 1 0".as_bytes()).unwrap())
 /// ```
 #[derive(Default)]
 pub struct ModelCountingVisitor;
@@ -132,7 +132,7 @@ mod tests {
     use crate::{core::BottomUpTraversal, D4Reader};
 
     fn model_count(instance: &str, n_vars: Option<usize>) -> usize {
-        let mut ddnnf = D4Reader::read(instance.as_bytes()).unwrap();
+        let mut ddnnf = D4Reader::default().read(instance.as_bytes()).unwrap();
         if let Some(n) = n_vars {
             ddnnf.update_n_vars(n);
         }

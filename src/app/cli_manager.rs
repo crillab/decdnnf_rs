@@ -74,9 +74,7 @@ impl<'a> CliManager<'a> {
         for c in &self.commands {
             app = app.subcommand(c.clap_subcommand());
         }
-        let matches_result = app
-            .clone()
-            .get_matches_from_safe(&mut args.clone().into_iter());
+        let matches_result = app.clone().get_matches_from_safe(args.clone());
         match matches_result {
             Ok(matches) => {
                 for c in &self.commands {

@@ -297,7 +297,7 @@ mod tests {
     use crate::D4Reader;
 
     fn assert_translation(init: &str, expected: &str) {
-        let ddnnf = D4Reader::read(&mut init.as_bytes()).unwrap();
+        let ddnnf = D4Reader::default().read(&mut init.as_bytes()).unwrap();
         let mut buffer = Vec::new();
         Writer::write(&mut buffer, &ddnnf).unwrap();
         let actual = String::from_utf8(buffer).unwrap();

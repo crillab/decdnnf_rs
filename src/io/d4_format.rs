@@ -14,14 +14,24 @@ use std::{
 /// The output format of d4 is an extension of the initial format output by c2d.
 /// The description of the format is available on the [d4](https://github.com/crillab/d4) repository.
 ///
-/// This reader performs syntactic checks (i.e. the input data follows the format).
+/// By default, this reader performs syntactic checks (i.e. the input data follows the format).
 /// It also checks that the described formula has a single root and no cycles.
+/// This behavior can be changed by calling [`do_not_check`](Self::set_do_not_check) before [`read`](Self::read).
+///
 /// The index of the root must be 1. The root must be the first node that is described.
 /// The decomposability of the conjunction nodes and the determinism of the disjunction nodes are not check by this reader.
 /// See [`DecisionDNNFChecker`](crate::DecisionDNNFChecker) if you need to assert these properties.
-pub struct Reader;
+#[derive(Default)]
+pub struct Reader {
+    do_not_check: bool,
+}
 
 impl Reader {
+    /// Sets whether the reader must activate its checks or not.
+    pub fn set_do_not_check(&mut self, do_not_check: bool) {
+        self.do_not_check = do_not_check;
+    }
+
     /// Reads an instance and returns it.
     ///
     /// # Errors
@@ -35,14 +45,15 @@ impl Reader {
     /// use rug::Integer;
     ///
     /// fn load_decision_dnnf_and_model_count(str_ddnnf: &str) -> Result<(DecisionDNNF, Integer), String> {
-    ///     let ddnnf = D4Reader::read(str_ddnnf.as_bytes()).map_err(|e| e.to_string())?;
+    ///     let reader = D4Reader::default();
+    ///     let ddnnf = reader.read(str_ddnnf.as_bytes()).map_err(|e| e.to_string())?;
     ///     let traversal = BottomUpTraversal::new(Box::<ModelCountingVisitor>::default());
     ///     let mc_data = traversal.traverse(&ddnnf);
     ///     Ok((ddnnf, mc_data.n_models().clone()))
     /// }
     /// # load_decision_dnnf_and_model_count("t 1 0").unwrap();
     /// ```
-    pub fn read<R>(reader: R) -> Result<DecisionDNNF>
+    pub fn read<R>(&self, reader: R) -> Result<DecisionDNNF>
     where
         R: Read,
     {
@@ -88,7 +99,9 @@ impl Reader {
         if reader_data.nodes.is_empty() {
             return Err(anyhow!("formula is empty"));
         }
-        reader_data.check_connectivity().context(context)?;
+        if !self.do_not_check {
+            reader_data.check_connectivity().context(context)?;
+        }
         Ok(DecisionDNNF::from_raw_data(
             reader_data.n_vars,
             reader_data.nodes,
@@ -242,7 +255,7 @@ mod tests {
     use super::*;
 
     fn assert_error(instance: &str, expected_error: &str) {
-        match Reader::read(&mut instance.as_bytes()) {
+        match Reader::default().read(&mut instance.as_bytes()) {
             Ok(_) => panic!(),
             Err(e) => assert_eq!(expected_error, format!("{}", e.root_cause())),
         }
@@ -350,10 +363,24 @@ mod tests {
     }
 
     #[test]
+    fn test_do_not_check() {
+        let mut reader = Reader::default();
+        reader.set_do_not_check(true);
+        assert!(reader.read(&mut "f 1 0\nt 2 0\n".as_bytes()).is_ok());
+        assert!(reader
+            .read(&mut "a 1 0\na 2 0\n1 2 0\n2 1 0\n".as_bytes())
+            .is_ok());
+    }
+
+    fn read_correct_ddnnf(str_ddnnf: &str) -> DecisionDNNF {
+        Reader::default().read(&mut str_ddnnf.as_bytes()).unwrap()
+    }
+
+    #[test]
     fn test_ok() {
         let instance =
             "a 1 0\no 2 0\no 3 0\nt 4 0\n1 2 0\n1 3 0\n2 4 -1 0\n2 4 1 0\n3 4 -2 0\n3 4 2 0\n";
-        let ddnnf = Reader::read(&mut instance.as_bytes()).unwrap();
+        let ddnnf = read_correct_ddnnf(instance);
         assert_eq!(2, ddnnf.n_vars());
         assert_eq!(4, ddnnf.nodes().as_slice().len());
         assert_eq!(6, ddnnf.edges().as_slice().len());
@@ -368,7 +395,7 @@ mod tests {
         2 3 -1 -2 0
         2 3 1 0
         1 2 0";
-        let ddnnf = Reader::read(&mut instance.as_bytes()).unwrap();
+        let ddnnf = read_correct_ddnnf(instance);
         assert_eq!(2, ddnnf.n_vars());
         assert_eq!(3, ddnnf.nodes().as_slice().len());
         assert_eq!(3, ddnnf.edges().as_slice().len());
@@ -377,7 +404,7 @@ mod tests {
     #[test]
     fn test_true_instance() {
         let instance = "t 1 0";
-        let ddnnf = Reader::read(&mut instance.as_bytes()).unwrap();
+        let ddnnf = read_correct_ddnnf(instance);
         assert_eq!(0, ddnnf.n_vars());
         assert_eq!(1, ddnnf.nodes().as_slice().len());
         assert_eq!(0, ddnnf.edges().as_slice().len());

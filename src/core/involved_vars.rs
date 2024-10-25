@@ -7,10 +7,6 @@ use bitvec::{bitvec, vec::BitVec};
 pub(crate) struct InvolvedVars(BitVec);
 
 impl InvolvedVars {
-    pub fn empty() -> Self {
-        Self(BitVec::default())
-    }
-
     pub fn new(n_vars: usize) -> Self {
         Self(bitvec![0; n_vars])
     }
@@ -25,15 +21,6 @@ impl InvolvedVars {
 
     pub fn xor_assign(&mut self, other: &InvolvedVars) {
         self.0 ^= &other.0;
-    }
-
-    pub fn union(v: Vec<InvolvedVars>) -> Self {
-        v.into_iter()
-            .reduce(|mut acc, x| {
-                acc.0 |= x.0;
-                acc
-            })
-            .expect("cannot build union of 0 sets")
     }
 
     pub fn set_literal(&mut self, l: Literal) {

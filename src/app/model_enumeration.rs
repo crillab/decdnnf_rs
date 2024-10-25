@@ -1,7 +1,8 @@
-use super::{common, model_writer::ModelWriter};
+use super::{cli_manager, common, model_writer::ModelWriter};
 use anyhow::Context;
-use crusti_app_helper::{info, App, AppSettings, Arg, SubCommand};
+use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 use decdnnf_rs::{DirectAccessEngine, Literal, ModelCounter, ModelEnumerator, ModelFinder};
+use log::info;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use rug::Integer;
 use std::{io::Write, sync::Mutex};
@@ -18,7 +19,7 @@ const ARG_THREADS: &str = "ARG_THREADS";
 
 const MT_BATCH_SIZE: usize = 1 << 10;
 
-impl<'a> crusti_app_helper::Command<'a> for Command {
+impl<'a> super::command::Command<'a> for Command {
     fn name(&self) -> &str {
         CMD_NAME
     }
@@ -27,9 +28,8 @@ impl<'a> crusti_app_helper::Command<'a> for Command {
         SubCommand::with_name(CMD_NAME)
             .about("enumerates the models of the formula")
             .setting(AppSettings::DisableVersion)
-            .arg(common::arg_input_var())
-            .arg(common::arg_n_vars())
-            .arg(crusti_app_helper::logging_level_cli_arg())
+            .args(&common::args_input())
+            .arg(cli_manager::logging_level_cli_arg())
             .arg(arg_compact_free_vars())
             .arg(
                 Arg::with_name(ARG_DECISION_TREE)
@@ -49,7 +49,7 @@ impl<'a> crusti_app_helper::Command<'a> for Command {
             )
     }
 
-    fn execute(&self, arg_matches: &crusti_app_helper::ArgMatches<'_>) -> anyhow::Result<()> {
+    fn execute(&self, arg_matches: &ArgMatches<'_>) -> anyhow::Result<()> {
         if arg_matches.is_present(ARG_DECISION_TREE) {
             enum_decision_tree(arg_matches)
         } else if arg_matches.is_present(ARG_THREADS) {
@@ -75,8 +75,8 @@ pub(crate) fn arg_do_not_print<'a>() -> Arg<'a, 'a> {
         .help("do not print the models (for testing purpose)")
 }
 
-fn enum_default(arg_matches: &crusti_app_helper::ArgMatches<'_>) -> anyhow::Result<()> {
-    let ddnnf = common::read_and_check_input_ddnnf(arg_matches)?;
+fn enum_default(arg_matches: &ArgMatches<'_>) -> anyhow::Result<()> {
+    let ddnnf = common::read_input_ddnnf(arg_matches)?;
     let mut model_writer = ModelWriter::new_locked(
         ddnnf.n_vars(),
         arg_matches.is_present(ARG_COMPACT_FREE_VARS),
@@ -92,8 +92,8 @@ fn enum_default(arg_matches: &crusti_app_helper::ArgMatches<'_>) -> anyhow::Resu
     Ok(())
 }
 
-fn enum_default_parallel(arg_matches: &crusti_app_helper::ArgMatches<'_>) -> anyhow::Result<()> {
-    let ddnnf = common::read_and_check_input_ddnnf(arg_matches)?;
+fn enum_default_parallel(arg_matches: &ArgMatches<'_>) -> anyhow::Result<()> {
+    let ddnnf = common::read_input_ddnnf(arg_matches)?;
     let compact_display = arg_matches.is_present(ARG_COMPACT_FREE_VARS);
     let model_counter = ModelCounter::new(&ddnnf, compact_display);
     let n_models = model_counter.global_count();
@@ -147,8 +147,8 @@ fn enum_default_parallel(arg_matches: &crusti_app_helper::ArgMatches<'_>) -> any
     Ok(())
 }
 
-fn enum_decision_tree(arg_matches: &crusti_app_helper::ArgMatches<'_>) -> anyhow::Result<()> {
-    let ddnnf = common::read_and_check_input_ddnnf(arg_matches)?;
+fn enum_decision_tree(arg_matches: &ArgMatches<'_>) -> anyhow::Result<()> {
+    let ddnnf = common::read_input_ddnnf(arg_matches)?;
     let mut model_writer = ModelWriter::new_locked(
         ddnnf.n_vars(),
         arg_matches.is_present(ARG_COMPACT_FREE_VARS),

@@ -1,16 +1,13 @@
 #![doc = include_str!("../README.md")]
 
 mod algorithms;
-pub use algorithms::CheckingVisitor;
-pub use algorithms::CheckingVisitorData;
+pub use algorithms::DecisionDNNFChecker;
 pub use algorithms::DirectAccessEngine;
 pub use algorithms::ModelCounter;
 pub use algorithms::ModelEnumerator;
 pub use algorithms::ModelFinder;
 
 mod core;
-pub use core::BottomUpTraversal;
-pub use core::BottomUpVisitor;
 pub use core::DecisionDNNF;
 pub use core::FreeVariables;
 pub use core::Literal;

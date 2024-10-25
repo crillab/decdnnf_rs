@@ -1,8 +1,7 @@
 use anyhow::{anyhow, Context, Result};
-use crusti_app_helper::{info, warn, Arg, ArgMatches};
-use decdnnf_rs::{
-    BottomUpTraversal, CheckingVisitor, CheckingVisitorData, D4Reader, DecisionDNNF, Literal,
-};
+use clap::{Arg, ArgMatches};
+use decdnnf_rs::{D4Reader, DecisionDNNF, DecisionDNNFChecker, Literal};
+use log::{info, warn};
 use std::{
     fs::{self, File},
     io::BufReader,
@@ -10,46 +9,60 @@ use std::{
 };
 
 const ARG_INPUT: &str = "ARG_INPUT";
-
-pub(crate) fn arg_input_var<'a>() -> Arg<'a, 'a> {
-    Arg::with_name(ARG_INPUT)
-        .short("i")
-        .long("input")
-        .empty_values(false)
-        .multiple(false)
-        .help("the input file that contains the Decision-DNNF formula")
-        .required(true)
-}
-
 const ARG_N_VARS: &str = "ARG_N_VARS";
+const ARG_DO_NOT_CHECK_DDNNF: &str = "ARG_DO_NOT_CHECK_DDNNF";
 
-pub(crate) fn arg_n_vars<'a>() -> Arg<'a, 'a> {
-    Arg::with_name(ARG_N_VARS)
-        .long("n-vars")
-        .empty_values(false)
-        .multiple(false)
-        .help(
-            "sets the number of variables (must be higher are equal to the highest variable index)",
-        )
+pub(crate) fn args_input<'a>() -> Vec<Arg<'a, 'a>> {
+    vec![
+        Arg::with_name(ARG_INPUT)
+            .short("i")
+            .long("input")
+            .empty_values(false)
+            .multiple(false)
+            .help("the input file that contains the Decision-DNNF formula")
+            .required(true),
+        Arg::with_name(ARG_DO_NOT_CHECK_DDNNF)
+            .long("do-not-check")
+            .takes_value(false)
+            .help("do not check the correctness of the input Decision-DNNF"),
+        Arg::with_name(ARG_DO_NOT_CHECK_DDNNF)
+            .long("do-not-check")
+            .takes_value(false)
+            .help("do not check the correctness of the input Decision-DNNF"),
+    ]
 }
 
-pub(crate) fn read_input_ddnnf(
-    arg_matches: &crusti_app_helper::ArgMatches<'_>,
-) -> Result<DecisionDNNF> {
-    let file_reader = create_input_file_reader(arg_matches)?;
-    let mut ddnnf = D4Reader::read(file_reader).context("while parsing the input Decision-DNNF")?;
+pub(crate) fn read_input_ddnnf(arg_matches: &ArgMatches<'_>) -> Result<DecisionDNNF> {
+    let input_file_canonicalized = realpath_from_arg(arg_matches, ARG_INPUT)?;
+    info!("reading input file {:?}", input_file_canonicalized);
+    let file_reader = BufReader::new(File::open(input_file_canonicalized)?);
+    let mut reader = D4Reader::default();
+    let do_not_check = arg_matches.is_present(ARG_DO_NOT_CHECK_DDNNF);
+    if do_not_check {
+        info!("skipping input formula correctness checks; an incorrect input formula may lead to an undefined behavior");
+        reader.set_do_not_check(true);
+    }
+    let mut ddnnf = reader
+        .read(file_reader)
+        .context("while parsing the input Decision-DNNF")?;
     if let Some(str_n) = arg_matches.value_of(ARG_N_VARS) {
         let n = str::parse::<usize>(str_n)
             .context("while parsing the number of variables provided on the command line")?;
         ddnnf.update_n_vars(n);
     }
+    if !do_not_check {
+        let checking_data = DecisionDNNFChecker::check(&ddnnf);
+        for w in checking_data.warnings() {
+            warn!("{w}");
+        }
+        if let Some(e) = checking_data.error() {
+            return Err(anyhow!("{e}"));
+        }
+    }
+    info!("number of variables: {}", ddnnf.n_vars());
+    info!("number of nodes: {}", ddnnf.n_nodes());
+    info!("number of edges: {}", ddnnf.n_edges());
     Ok(ddnnf)
-}
-
-pub(crate) fn create_input_file_reader(arg_matches: &ArgMatches<'_>) -> Result<BufReader<File>> {
-    let input_file_canonicalized = realpath_from_arg(arg_matches, ARG_INPUT)?;
-    info!("reading input file {:?}", input_file_canonicalized);
-    Ok(BufReader::new(File::open(input_file_canonicalized)?))
 }
 
 fn realpath_from_arg(arg_matches: &ArgMatches<'_>, arg: &str) -> Result<PathBuf> {
@@ -64,26 +77,4 @@ pub(crate) fn print_dimacs_model(model: &[Literal]) {
         print!(" {l}");
     }
     println!(" 0");
-}
-
-pub(crate) fn print_warnings_and_errors(checking_data: &CheckingVisitorData) -> anyhow::Result<()> {
-    for w in checking_data.get_warnings() {
-        warn!("{w}");
-    }
-    if let Some(e) = checking_data.get_error() {
-        Err(anyhow!("{e}"))
-    } else {
-        Ok(())
-    }
-}
-
-pub fn read_and_check_input_ddnnf(
-    arg_matches: &crusti_app_helper::ArgMatches<'_>,
-) -> anyhow::Result<DecisionDNNF> {
-    let ddnnf = read_input_ddnnf(arg_matches)?;
-    let traversal_visitor = Box::<CheckingVisitor>::default();
-    let traversal_engine = BottomUpTraversal::new(traversal_visitor);
-    let checking_data = traversal_engine.traverse(&ddnnf);
-    print_warnings_and_errors(&checking_data)?;
-    Ok(ddnnf)
 }

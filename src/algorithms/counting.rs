@@ -17,7 +17,7 @@ use rug::Integer;
 ///     let model_counter = ModelCounter::new(ddnnf, false);
 ///     println!("the formula has {} models", model_counter.global_count());
 /// }
-/// # count_models(&decdnnf_rs::D4Reader::read("t 1 0".as_bytes()).unwrap())
+/// # count_models(&decdnnf_rs::D4Reader::default().read("t 1 0".as_bytes()).unwrap())
 /// ```
 pub struct ModelCounter<'a> {
     ddnnf: &'a DecisionDNNF,
@@ -154,7 +154,7 @@ mod tests {
         expected_model_count: usize,
         expected_path_count: usize,
     ) {
-        let mut ddnnf = D4Reader::read(instance.as_bytes()).unwrap();
+        let mut ddnnf = D4Reader::default().read(instance.as_bytes()).unwrap();
         if let Some(n) = n_vars {
             ddnnf.update_n_vars(n);
         }

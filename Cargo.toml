@@ -2,10 +2,11 @@
 name = "decdnnf_rs"
 authors = ["Jean-Marie Lagniez <lagniez@cril.fr>", "Emmanuel Lonca <lonca@cril.fr>"]
 license = "GPL-3.0-or-later"
-version = "0.1.0"
+version = "0.1.1"
 description = "A library for Decision-DNNFs."
 categories = ["command-line-utilities", "science"]
 keywords = ["decision", "DNNF", "model", "counting", "enumeration"]
+homepage = "https://www.cril.univ-artois.fr/software/decdnnf-rs/"
 repository = "https://github.com/crillab/decdnnf_rs"
 rust-version = "1.72.1"
 edition = "2021"
@@ -27,19 +28,24 @@ path = "src/lib.rs"
 name = "decdnnf_rs"
 path = "src/main.rs"
 
-[profile.release]
+[profile.profiling]
+inherits = "release"
 debug = true
 
 [dependencies]
 anyhow = "1.0"
 bincode = {version = "1.3", optional = true}
 bitvec = "1.0"
-crusti_app_helper = {path = "local_crates/crusti_app_helper-v0.1"}
+chrono = "0.4.19"
+clap = "2.33.3"
+fern = { version = "0.6.0", features = ["colored"] }
+log = "0.4.20"
 mpi = {version = "0.8", optional = true}
 rayon = "1.10"
 rug = "1.22"
 rustc-hash = "1.1"
 serde = {version = "1.0", optional = true}
+sysinfo = "0.30"
 
 [features]
 mpi = ["dep:bincode", "dep:mpi", "dep:serde", "rug/serde"]

@@ -216,8 +216,20 @@ impl DecisionDNNF {
         &self.nodes
     }
 
+    /// Returns the number of nodes of the formula.
+    #[must_use]
+    pub fn n_nodes(&self) -> usize {
+        self.nodes.as_slice().len()
+    }
+
     pub(crate) fn edges(&self) -> &EdgeVec {
         &self.edges
+    }
+
+    /// Returns the number of edges of the formula.
+    #[must_use]
+    pub fn n_edges(&self) -> usize {
+        self.edges.as_slice().len()
     }
 
     /// Returns the free variables.

@@ -1,7 +1,8 @@
-use super::{common, model_enumeration, model_writer::ModelWriter};
+use super::{cli_manager, common, model_enumeration, model_writer::ModelWriter};
 use anyhow::anyhow;
-use crusti_app_helper::{info, App, AppSettings, Arg, SubCommand};
+use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 use decdnnf_rs::{DirectAccessEngine, ModelCounter, ModelEnumerator};
+use log::info;
 use mpi::{
     datatype::{DynBuffer, DynBufferMut},
     topology::SimpleCommunicator,
@@ -22,7 +23,7 @@ const ARG_MPI: &str = "ARG_MPI";
 
 const MT_BATCH_SIZE: usize = 1 << 10;
 
-impl<'a> crusti_app_helper::Command<'a> for Command {
+impl<'a> super::command::Command<'a> for Command {
     fn name(&self) -> &str {
         CMD_NAME
     }
@@ -31,9 +32,8 @@ impl<'a> crusti_app_helper::Command<'a> for Command {
         SubCommand::with_name(CMD_NAME)
             .about("enumerates the models of the formula using MPI")
             .setting(AppSettings::DisableVersion)
-            .arg(common::arg_input_var())
-            .arg(common::arg_n_vars())
-            .arg(crusti_app_helper::logging_level_cli_arg())
+            .args(&common::args_input())
+            .arg(cli_manager::logging_level_cli_arg())
             .arg(model_enumeration::arg_compact_free_vars())
             .arg(model_enumeration::arg_do_not_print())
             .arg(
@@ -44,7 +44,7 @@ impl<'a> crusti_app_helper::Command<'a> for Command {
             )
     }
 
-    fn execute(&self, arg_matches: &crusti_app_helper::ArgMatches<'_>) -> anyhow::Result<()> {
+    fn execute(&self, arg_matches: &ArgMatches<'_>) -> anyhow::Result<()> {
         enum_default_mpi(arg_matches)
     }
 }
@@ -53,7 +53,7 @@ const MPI_TAG_INTERVAL: i32 = 0;
 const MPI_TAG_BOUND: i32 = 1;
 const MPI_TAG_COUNT: i32 = 2;
 
-fn enum_default_mpi(arg_matches: &crusti_app_helper::ArgMatches<'_>) -> anyhow::Result<()> {
+fn enum_default_mpi(arg_matches: &ArgMatches<'_>) -> anyhow::Result<()> {
     let universe = mpi::initialize().unwrap();
     let world = universe.world();
     let current_rank = world.rank();
@@ -63,7 +63,7 @@ fn enum_default_mpi(arg_matches: &crusti_app_helper::ArgMatches<'_>) -> anyhow::
     if n_ranks < 2 {
         return Err(anyhow!("number of ranks must be at least 2"));
     }
-    let ddnnf = common::read_and_check_input_ddnnf(arg_matches)?;
+    let ddnnf = common::read_input_ddnnf(arg_matches)?;
     let compact_display = arg_matches.is_present(ARG_COMPACT_FREE_VARS);
     let model_counter = ModelCounter::new(&ddnnf, compact_display);
     if current_rank == 0 {
@@ -77,7 +77,7 @@ fn enum_default_mpi(arg_matches: &crusti_app_helper::ArgMatches<'_>) -> anyhow::
 fn master_worker(
     current_world: &SimpleCommunicator,
     model_counter: &ModelCounter,
-    arg_matches: &crusti_app_helper::ArgMatches<'_>,
+    arg_matches: &ArgMatches<'_>,
 ) {
     let n_models = model_counter.global_count();
     info!("formula has {n_models} models");
@@ -119,7 +119,7 @@ fn master_worker(
 fn computer_worker(
     current_world: &SimpleCommunicator,
     model_counter: &ModelCounter,
-    arg_matches: &crusti_app_helper::ArgMatches<'_>,
+    arg_matches: &ArgMatches<'_>,
 ) {
     let compact_display = arg_matches.is_present(ARG_COMPACT_FREE_VARS);
     let mut model_writer = ModelWriter::new_locked(

@@ -1,8 +1,9 @@
-use super::common;
+use super::{cli_manager, common};
 use crate::app::model_writer::ModelWriter;
 use anyhow::Context;
-use crusti_app_helper::{info, App, AppSettings, Arg, SubCommand};
+use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 use decdnnf_rs::{DirectAccessEngine, ModelCounter};
+use log::info;
 use rug::{rand::RandState, Integer};
 use rustc_hash::FxHashMap;
 use std::str::FromStr;
@@ -15,7 +16,7 @@ const CMD_NAME: &str = "sampling";
 const ARG_LIMIT: &str = "ARG_LIMIT";
 const ARG_DO_NOT_PRINT: &str = "ARG_DO_NOT_PRINT";
 
-impl<'a> crusti_app_helper::Command<'a> for Command {
+impl<'a> super::command::Command<'a> for Command {
     fn name(&self) -> &str {
         CMD_NAME
     }
@@ -24,9 +25,8 @@ impl<'a> crusti_app_helper::Command<'a> for Command {
         SubCommand::with_name(CMD_NAME)
             .about("performs a uniform sampling among the models of the formula")
             .setting(AppSettings::DisableVersion)
-            .arg(common::arg_input_var())
-            .arg(common::arg_n_vars())
-            .arg(crusti_app_helper::logging_level_cli_arg())
+            .args(&common::args_input())
+            .arg(cli_manager::logging_level_cli_arg())
             .arg(
                 Arg::with_name(ARG_LIMIT)
                     .short("l")
@@ -43,8 +43,8 @@ impl<'a> crusti_app_helper::Command<'a> for Command {
             )
     }
 
-    fn execute(&self, arg_matches: &crusti_app_helper::ArgMatches<'_>) -> anyhow::Result<()> {
-        let ddnnf = common::read_and_check_input_ddnnf(arg_matches)?;
+    fn execute(&self, arg_matches: &ArgMatches<'_>) -> anyhow::Result<()> {
+        let ddnnf = common::read_input_ddnnf(arg_matches)?;
         let model_counter = ModelCounter::new(&ddnnf, false);
         let n_models = model_counter.global_count();
         info!("formula has {n_models} models");

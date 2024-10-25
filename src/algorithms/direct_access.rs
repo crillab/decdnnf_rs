@@ -170,7 +170,7 @@ mod tests {
         expected_partial_graphs: Vec<Vec<usize>>,
         n_vars: Option<usize>,
     ) {
-        let mut ddnnf = D4Reader::read(str_ddnnf.as_bytes()).unwrap();
+        let mut ddnnf = D4Reader::default().read(str_ddnnf.as_bytes()).unwrap();
         if let Some(n) = n_vars {
             ddnnf.update_n_vars(n);
         }

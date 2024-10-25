@@ -28,7 +28,8 @@ path = "src/lib.rs"
 name = "decdnnf_rs"
 path = "src/main.rs"
 
-[profile.release]
+[profile.profiling]
+inherits = "release"
 debug = true
 
 [dependencies]

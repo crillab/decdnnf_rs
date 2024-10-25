@@ -134,19 +134,25 @@ impl Reader {
         let str_target_index = words.next().ok_or(anyhow!("missing target index"))?;
         let target_index =
             usize::from_str(str_target_index).context("while parsing the target index")?;
-        let mut propagated = Vec::new();
-        loop {
-            match words.next() {
-                Some("0") => break,
-                Some(w) if isize::from_str(w).is_ok() => {
-                    propagated.push(Literal::from(isize::from_str(w).unwrap()));
+        let mut got_zero = false;
+        let propagated = words
+            .filter_map(|w| {
+                if got_zero {
+                    Some(Err(anyhow!("unexpected content after 0")))
+                } else if w == "0" {
+                    got_zero = true;
+                    None
+                } else {
+                    Some(
+                        isize::from_str(w)
+                            .map(Literal::from)
+                            .map_err(|_| anyhow!(r#"expected a literal, got "{w}""#)),
+                    )
                 }
-                Some(w) => return Err(anyhow!(r#"expected a literal, got "{w}""#)),
-                None => return Err(anyhow!("missing final 0")),
-            }
-        }
-        if words.next().is_some() {
-            return Err(anyhow!("unexpected content after 0"));
+            })
+            .collect::<Result<Vec<Literal>>>()?;
+        if !got_zero {
+            return Err(anyhow!("missing final 0"));
         }
         reader_data.add_new_edge(source_index, target_index, propagated)
     }
@@ -178,7 +184,14 @@ impl D4FormatReaderData {
         mut propagated: Vec<Literal>,
     ) -> Result<()> {
         propagated.sort_unstable_by_key(Literal::var_index);
-        propagated.dedup();
+        if !propagated.is_empty() {
+            self.n_vars = usize::max(self.n_vars, propagated.last().unwrap().var_index() + 1);
+        }
+        let old_len = propagated.len();
+        propagated.dedup_by_key(|l| l.var_index());
+        if propagated.len() != old_len {
+            return Err(anyhow!("a variable is propagated multiple times"));
+        }
         if source_index > self.nodes.len() {
             return Err(anyhow!(
                 "wrong source index; max is {}, got {source_index}",
@@ -194,15 +207,6 @@ impl D4FormatReaderData {
         if source_index == target_index {
             return Err(anyhow!("source and target index must be different"));
         }
-        self.n_vars = usize::max(
-            self.n_vars,
-            propagated
-                .iter()
-                .map(Literal::var_index)
-                .max()
-                .map(|i| i + 1)
-                .unwrap_or_default(),
-        );
         let edge = Edge::from_raw_data((target_index - 1).into(), propagated);
         self.edges.push(edge);
         self.nodes[source_index - 1].add_edge((self.edges.len() - 1).into())?;

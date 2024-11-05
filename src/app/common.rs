@@ -6,6 +6,7 @@ use std::{
     fs::{self, File},
     io::BufReader,
     path::PathBuf,
+    time::SystemTime,
 };
 
 const ARG_INPUT: &str = "ARG_INPUT";
@@ -33,6 +34,12 @@ pub(crate) fn args_input<'a>() -> Vec<Arg<'a, 'a>> {
 }
 
 pub(crate) fn read_input_ddnnf(arg_matches: &ArgMatches<'_>) -> Result<DecisionDNNF> {
+    log_time_for_step("Decision-DNNF reading", || {
+        read_input_ddnnf_step(arg_matches)
+    })
+}
+
+pub(crate) fn read_input_ddnnf_step(arg_matches: &ArgMatches<'_>) -> Result<DecisionDNNF> {
     let input_file_canonicalized = realpath_from_arg(arg_matches, ARG_INPUT)?;
     info!("reading input file {:?}", input_file_canonicalized);
     let file_reader = BufReader::new(File::open(input_file_canonicalized)?);
@@ -77,4 +84,15 @@ pub(crate) fn print_dimacs_model(model: &[Literal]) {
         print!(" {l}");
     }
     println!(" 0");
+}
+
+pub(crate) fn log_time_for_step<F, T>(step_name: &str, step: F) -> T
+where
+    F: FnOnce() -> T,
+{
+    let start_time = SystemTime::now();
+    info!("starting {step_name}");
+    let result = step();
+    info!("{step_name} took {:?}", start_time.elapsed().unwrap());
+    result
 }

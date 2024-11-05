@@ -1,53 +1,163 @@
 use crate::Literal;
-use bitvec::{bitvec, vec::BitVec};
+use std::ops::{BitAndAssign, BitOrAssign, BitXorAssign};
+type IntType = u32;
+const N_BITS: usize = IntType::BITS as usize;
 
 /// A type dedicated to the registration of the variables involved at some points.
-/// Relies on bitsets.
 #[derive(Clone, Debug)]
-pub(crate) struct InvolvedVars(BitVec);
+pub(crate) struct InvolvedVars {
+    n_vars: usize,
+    data: Vec<IntType>,
+}
 
 impl InvolvedVars {
     pub fn new(n_vars: usize) -> Self {
-        Self(bitvec![0; n_vars])
-    }
-
-    pub fn and_assign(&mut self, other: &InvolvedVars) {
-        self.0 &= &other.0;
-    }
-
-    pub fn or_assign(&mut self, other: &InvolvedVars) {
-        self.0 |= &other.0;
-    }
-
-    pub fn xor_assign(&mut self, other: &InvolvedVars) {
-        self.0 ^= &other.0;
+        Self {
+            n_vars,
+            data: vec![0; n_vars.div_ceil(N_BITS)],
+        }
     }
 
     pub fn set_literal(&mut self, l: Literal) {
-        self.0.set(l.var_index(), true);
+        let index = Literal::var_index(&l);
+        let div = index / N_BITS;
+        let rem = index % N_BITS;
+        self.data[div] |= 1 << rem;
+    }
+
+    pub fn is_set(&self, l: Literal) -> bool {
+        let index = Literal::var_index(&l);
+        let div = index / N_BITS;
+        let rem = index % N_BITS;
+        (self.data[div] >> rem) & 1 == 1
+    }
+
+    pub fn any(&self) -> bool {
+        self.data.iter().any(|i| *i > 0)
     }
 
     pub fn set_literals(&mut self, literals: &[Literal]) {
         literals.iter().for_each(|l| self.set_literal(*l));
     }
 
-    pub fn is_set(&self, l: Literal) -> bool {
-        *self.0.get(l.var_index()).unwrap()
-    }
-
     pub fn iter_missing_literals(&self) -> impl Iterator<Item = Literal> + '_ {
-        self.0
-            .iter_zeros()
-            .map(|i| Literal::from(-isize::try_from(i + 1).unwrap()))
+        self.data
+            .iter()
+            .enumerate()
+            .filter_map(|(offset, i)| {
+                if *i == IntType::MAX {
+                    None
+                } else {
+                    let it = BitToLitIterator::new(self.n_vars, offset * N_BITS, !*i);
+                    Some(it.into_iter().map(|l| l.flip()))
+                }
+            })
+            .flatten()
     }
 
-    pub fn iter_neg_literals(&self) -> impl Iterator<Item = Literal> + '_ {
-        self.0
-            .iter_ones()
-            .map(|i| Literal::from(-isize::try_from(i + 1).unwrap()))
+    pub fn iter_xor_neg_literals<'a>(
+        set0: &'a InvolvedVars,
+        set1: &'a InvolvedVars,
+    ) -> impl Iterator<Item = Literal> + 'a {
+        set0.data
+            .iter()
+            .zip(set1.data.iter())
+            .enumerate()
+            .filter_map(|(offset, (int0, int1))| {
+                let xor = int0 ^ int1;
+                if xor == 0 {
+                    None
+                } else {
+                    let it = BitToLitIterator::new(set0.n_vars, offset * N_BITS, xor);
+                    Some(it.into_iter().map(|l| l.flip()))
+                }
+            })
+            .flatten()
+    }
+}
+
+macro_rules! decl_bit_assign {
+    ($trait_name:ident, $eff_type:ty, $fn_name:ident) => {
+        impl $trait_name<$eff_type> for InvolvedVars {
+            fn $fn_name(&mut self, rhs: $eff_type) {
+                self.data
+                    .iter_mut()
+                    .zip(rhs.data.iter())
+                    .for_each(|(s, o)| s.$fn_name(o));
+            }
+        }
+    };
+}
+
+macro_rules! decl_all_bit_assign {
+    ($trait_name:ident, $fn_name:ident) => {
+        decl_bit_assign!($trait_name, InvolvedVars, $fn_name);
+        decl_bit_assign!($trait_name, &InvolvedVars, $fn_name);
+        decl_bit_assign!($trait_name, &mut InvolvedVars, $fn_name);
+    };
+}
+decl_all_bit_assign!(BitAndAssign, bitand_assign);
+decl_all_bit_assign!(BitOrAssign, bitor_assign);
+decl_all_bit_assign!(BitXorAssign, bitxor_assign);
+
+struct BitToLitIterator {
+    n_vars: IntType,
+    offset: IntType,
+    current: IntType,
+}
+
+impl BitToLitIterator {
+    #[allow(clippy::cast_possible_truncation)]
+    fn new(n_vars: usize, offset: usize, current: IntType) -> Self {
+        Self {
+            n_vars: n_vars as IntType,
+            offset: offset as IntType,
+            current,
+        }
+    }
+}
+
+impl Iterator for BitToLitIterator {
+    type Item = Literal;
+
+    #[allow(clippy::cast_possible_truncation)]
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.current == 0 || self.offset >= self.n_vars {
+            None
+        } else {
+            let n_zeroes = IntType::from(self.current.trailing_zeros());
+            self.offset += n_zeroes + 1;
+            self.current >>= n_zeroes + 1;
+            if self.offset > self.n_vars {
+                None
+            } else {
+                #[allow(clippy::cast_possible_wrap)]
+                Some(Literal::from(self.offset as isize))
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_iter_missing_literals_all_missing() {
+        let involved = InvolvedVars::new(200);
+        assert_eq!(
+            (1..=200).map(|i| Literal::from(-i)).collect::<Vec<_>>(),
+            involved.iter_missing_literals().collect::<Vec<_>>(),
+        );
     }
 
-    pub fn any(&self) -> bool {
-        self.0.any()
+    #[test]
+    fn test_iter_missing_literals_none_missing() {
+        let mut involved = InvolvedVars::new(1);
+        involved.set_literal(Literal::from(1));
+        assert_eq!(
+            vec![] as Vec<Literal>,
+            involved.iter_missing_literals().collect::<Vec<_>>(),
+        );
     }
 }

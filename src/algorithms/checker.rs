@@ -92,7 +92,7 @@ impl DecisionDNNFChecker {
                     if let Some(ref mut u) = union {
                         let mut intersection = involved_in_child.clone();
                         intersection.set_literals(edge.propagated());
-                        intersection.and_assign(u);
+                        intersection &= u;
                         if intersection.any() {
                             result.error = Some(format!(
                                 "AND children share variables (AND node index is {})",
@@ -173,7 +173,7 @@ impl DecisionDNNFChecker {
         propagated: &[Literal],
     ) {
         if let Some(ref mut u) = opt_union {
-            u.or_assign(involved);
+            *u |= involved;
             u.set_literals(propagated);
         } else {
             *opt_union = Some(involved.clone());

@@ -83,11 +83,14 @@ fn compute_free_vars_from(
             let target = edge.target();
             let mut involved_in_child =
                 involved_vars[usize::from(target)].as_ref().unwrap().clone();
-            for l in edge.propagated() {
-                involved_in_child.set_literal(*l);
-            }
-            involved_in_child.xor_assign(involved_vars[usize::from(from)].as_ref().unwrap());
-            or_free_vars[usize::from(from)].push(involved_in_child.iter_neg_literals().collect());
+            involved_in_child.set_literals(edge.propagated());
+            or_free_vars[usize::from(from)].push(
+                InvolvedVars::iter_xor_neg_literals(
+                    &involved_in_child,
+                    involved_vars[usize::from(from)].as_ref().unwrap(),
+                )
+                .collect(),
+            );
         }
     }
 }
@@ -105,10 +108,8 @@ fn compute_involved_vars(
                 let edge = &ddnnf.edges()[*edge_index];
                 let target = edge.target();
                 compute_free_vars_from(ddnnf, target, involved_vars, or_free_vars);
-                union.or_assign(involved_vars[usize::from(target)].as_ref().unwrap());
-                for l in edge.propagated() {
-                    union.set_literal(*l);
-                }
+                union |= involved_vars[usize::from(target)].as_ref().unwrap();
+                union.set_literals(edge.propagated());
             }
         }
         Node::True | Node::False => {}
@@ -166,5 +167,44 @@ impl OrFreeVariables {
     pub fn child_free_vars_mut(&mut self, var: usize, child_index: usize) -> &mut [Literal] {
         let (start, length) = self.indices_and_lengths[var][child_index];
         &mut self.data[start..start + length]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::D4Reader;
+
+    #[test]
+    fn test_ok() {
+        let instance = r"
+                o 1 0
+                o 2 0
+                t 3 0
+                2 3 -1 -2 0
+                2 3 1 0
+                1 2 0";
+        let ddnnf = D4Reader::default().read(instance.as_bytes()).unwrap();
+        let free_vars = ddnnf.free_vars();
+        assert_eq!(&[] as &[Literal], free_vars.root_free_vars(),);
+    }
+
+    #[test]
+    fn test_no_vars() {
+        let instance = "t 1 0";
+        let ddnnf = D4Reader::default().read(instance.as_bytes()).unwrap();
+        let free_vars = ddnnf.free_vars();
+        assert_eq!(&[] as &[Literal], free_vars.root_free_vars(),);
+    }
+
+    #[test]
+    fn test_one_var_nothing_free() {
+        let instance = r"
+                o 1 0
+                t 2 0
+                1 2 1 0";
+        let ddnnf = D4Reader::default().read(instance.as_bytes()).unwrap();
+        let free_vars = ddnnf.free_vars();
+        assert_eq!(&[] as &[Literal], free_vars.root_free_vars(),);
     }
 }

@@ -77,17 +77,19 @@ pub(crate) fn arg_do_not_print<'a>() -> Arg<'a, 'a> {
 
 fn enum_default(arg_matches: &ArgMatches<'_>) -> anyhow::Result<()> {
     let ddnnf = common::read_input_ddnnf(arg_matches)?;
-    common::log_time_for_step("free variables computation", || {
-        ddnnf.free_vars();
-    });
+    let compact_display = arg_matches.is_present(ARG_COMPACT_FREE_VARS);
+    if !compact_display {
+        common::log_time_for_step("free variables computation", || {
+            ddnnf.free_vars();
+        });
+    }
     common::log_time_for_step("model enumeration", || {
         let mut model_writer = ModelWriter::new_locked(
             ddnnf.n_vars(),
-            arg_matches.is_present(ARG_COMPACT_FREE_VARS),
+            compact_display,
             arg_matches.is_present(ARG_DO_NOT_PRINT),
         );
-        let mut model_iterator =
-            ModelEnumerator::new(&ddnnf, arg_matches.is_present(ARG_COMPACT_FREE_VARS));
+        let mut model_iterator = ModelEnumerator::new(&ddnnf, compact_display);
         while let Some(model) = model_iterator.compute_next_model() {
             model_writer.write_model_ordered(model);
         }
@@ -99,11 +101,13 @@ fn enum_default(arg_matches: &ArgMatches<'_>) -> anyhow::Result<()> {
 
 fn enum_default_parallel(arg_matches: &ArgMatches<'_>) -> anyhow::Result<()> {
     let ddnnf = common::read_input_ddnnf(arg_matches)?;
-    common::log_time_for_step("free variables computation", || {
-        ddnnf.free_vars();
-    });
+    let compact_display = arg_matches.is_present(ARG_COMPACT_FREE_VARS);
+    if !compact_display {
+        common::log_time_for_step("free variables computation", || {
+            ddnnf.free_vars();
+        });
+    }
     common::log_time_for_step("model enumeration", || {
-        let compact_display = arg_matches.is_present(ARG_COMPACT_FREE_VARS);
         let model_counter = ModelCounter::new(&ddnnf, compact_display);
         let n_models = model_counter.global_count();
         let next_min_bound = Mutex::new(Integer::ZERO);

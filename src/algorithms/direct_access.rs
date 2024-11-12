@@ -33,12 +33,13 @@ impl<'a> DirectAccessEngine<'a> {
             return None;
         }
         let mut model = vec![None; self.model_counter.ddnnf().n_vars()];
-        update_model_with_free_vars(
-            &mut model,
-            &mut n,
-            self.ddnnf().free_vars().root_free_vars(),
-            self.model_counter.partial_models(),
-        );
+        if !self.model_counter.partial_models() {
+            update_model_with_free_vars(
+                &mut model,
+                &mut n,
+                self.ddnnf().free_vars().root_free_vars(),
+            );
+        }
         self.build_model_from(&mut model, n, NodeIndex::from(0), &mut |_, _| {});
         Some(model)
     }
@@ -53,12 +54,13 @@ impl<'a> DirectAccessEngine<'a> {
         }
         let mut model = vec![None; self.model_counter.ddnnf().n_vars()];
         let mut model_graph = vec![0; self.model_counter.ddnnf().nodes().as_slice().len()];
-        update_model_with_free_vars(
-            &mut model,
-            &mut n,
-            self.ddnnf().free_vars().root_free_vars(),
-            self.model_counter.partial_models(),
-        );
+        if !self.model_counter.partial_models() {
+            update_model_with_free_vars(
+                &mut model,
+                &mut n,
+                self.ddnnf().free_vars().root_free_vars(),
+            );
+        }
         self.build_model_from(
             &mut model,
             n,
@@ -97,29 +99,32 @@ impl<'a> DirectAccessEngine<'a> {
                     let edge = &self.model_counter.ddnnf().edges()[*edge];
                     let target = edge.target();
                     let child_n_models = self.model_counter.count_from(target);
-                    let child_free_vars = self
-                        .ddnnf()
-                        .free_vars()
-                        .or_free_vars()
-                        .child_free_vars(usize::from(index), i);
-                    let total_child_n_models = if self.model_counter.partial_models() {
-                        Integer::from(child_n_models)
+                    let mut total_child_n_models = Integer::from(child_n_models);
+                    if self.model_counter.partial_models() {
+                        if n < total_child_n_models {
+                            on_or_child_selection(index, i);
+                            edge.propagated()
+                                .iter()
+                                .for_each(|p| model[p.var_index()] = Some(*p));
+                            self.build_model_from(model, n, target, on_or_child_selection);
+                            return;
+                        }
                     } else {
-                        Integer::from(child_n_models << child_free_vars.len())
-                    };
-                    if n < total_child_n_models {
-                        update_model_with_free_vars(
-                            model,
-                            &mut n,
-                            child_free_vars,
-                            self.model_counter.partial_models(),
-                        );
-                        on_or_child_selection(index, i);
-                        edge.propagated()
-                            .iter()
-                            .for_each(|p| model[p.var_index()] = Some(*p));
-                        self.build_model_from(model, n, target, on_or_child_selection);
-                        return;
+                        let child_free_vars = self
+                            .ddnnf()
+                            .free_vars()
+                            .or_free_vars()
+                            .child_free_vars(usize::from(index), i);
+                        total_child_n_models <<= child_free_vars.len();
+                        if n < total_child_n_models {
+                            update_model_with_free_vars(model, &mut n, child_free_vars);
+                            on_or_child_selection(index, i);
+                            edge.propagated()
+                                .iter()
+                                .for_each(|p| model[p.var_index()] = Some(*p));
+                            self.build_model_from(model, n, target, on_or_child_selection);
+                            return;
+                        }
                     }
                     n -= total_child_n_models;
                 }
@@ -140,21 +145,16 @@ fn update_model_with_free_vars(
     model: &mut [Option<Literal>],
     n: &mut Integer,
     free_vars: &[Literal],
-    update_with_none: bool,
 ) {
     for (i, v) in free_vars.iter().rev().enumerate() {
         #[allow(clippy::cast_possible_truncation)]
-        if update_with_none {
-            model[v.var_index()] = None;
-        } else if n.get_bit(i as u32) {
+        if n.get_bit(i as u32) {
             model[v.var_index()] = Some(v.flip());
         } else {
             model[v.var_index()] = Some(*v);
         }
     }
-    if !update_with_none {
-        *n >>= free_vars.len();
-    }
+    *n >>= free_vars.len();
 }
 
 #[cfg(test)]

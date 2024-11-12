@@ -14,7 +14,7 @@ const FORCE_ONE_INSTANCE: &str = "a 1 0\nt 2 0\n1 2 1 0\n";
 fn create_command(input_file: &NamedTempFile, additional_args: &[&str]) -> Assert {
     Command::cargo_bin("decdnnf_rs")
         .unwrap()
-        .args(&[
+        .args([
             "model-enumeration",
             "--logging-level",
             "off",

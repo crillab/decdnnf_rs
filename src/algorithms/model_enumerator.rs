@@ -1,6 +1,6 @@
 use crate::{
     core::{EdgeIndex, Node, NodeIndex},
-    DecisionDNNF, DirectAccessEngine, Literal, OrFreeVariables,
+    DecisionDNNF, DirectAccessEngine, FreeVariables, Literal, OrFreeVariables,
 };
 use rug::Integer;
 
@@ -99,9 +99,14 @@ impl<'a> ModelEnumerator<'a> {
     #[allow(clippy::missing_panics_doc)]
     pub fn new(ddnnf: &'a DecisionDNNF, elude_free_vars: bool) -> Self {
         let n_nodes = ddnnf.nodes().as_slice().len();
-        let free_vars = ddnnf.free_vars();
-        let root_free_vars_assignment = free_vars.root_free_vars().to_vec();
-        let or_free_vars_assignments = free_vars.or_free_vars().clone();
+        let (root_free_vars_assignment, or_free_vars_assignments) = if elude_free_vars {
+            FreeVariables::compute_null(ddnnf).take_data()
+        } else {
+            (
+                ddnnf.free_vars().root_free_vars().to_vec(),
+                ddnnf.free_vars().or_free_vars().clone(),
+            )
+        };
         let mut model = vec![None; ddnnf.n_vars()];
         Self::update_model_with_propagations(
             &mut model,

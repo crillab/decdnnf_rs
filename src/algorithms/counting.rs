@@ -32,7 +32,6 @@ impl<'a> ModelCounter<'a> {
     #[must_use]
     pub fn new(ddnnf: &'a DecisionDNNF, partial_models: bool) -> Self {
         let mut n_models = vec![None; ddnnf.nodes().as_slice().len()];
-        let free_variables = ddnnf.free_vars();
         if partial_models {
             compute_models_from(
                 ddnnf,
@@ -45,6 +44,7 @@ impl<'a> ModelCounter<'a> {
                 &mut n_models,
             );
         } else {
+            let free_variables = ddnnf.free_vars();
             compute_models_from(
                 ddnnf,
                 free_variables.root_free_vars(),

@@ -22,10 +22,13 @@ pub(crate) fn args_input<'a>() -> Vec<Arg<'a, 'a>> {
             .multiple(false)
             .help("the input file that contains the Decision-DNNF formula")
             .required(true),
-        Arg::with_name(ARG_DO_NOT_CHECK_DDNNF)
-            .long("do-not-check")
-            .takes_value(false)
-            .help("do not check the correctness of the input Decision-DNNF"),
+        Arg::with_name(ARG_N_VARS)
+            .long("n-vars")
+            .empty_values(false)
+            .multiple(false)
+            .help(
+                "sets the number of variables (must be higher are equal to the highest variable index)",
+            ),
         Arg::with_name(ARG_DO_NOT_CHECK_DDNNF)
             .long("do-not-check")
             .takes_value(false)

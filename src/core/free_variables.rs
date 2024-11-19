@@ -45,21 +45,6 @@ impl FreeVariables {
         }
     }
 
-    /// Does not computes the free variables; instead, returns the structure corresponding to the Decision-DNNF if it would have no free variables.
-    pub(crate) fn compute_null(ddnnf: &DecisionDNNF) -> Self {
-        let n_nodes = ddnnf.nodes().as_slice().len();
-        let mut or_free_vars = vec![vec![]; n_nodes];
-        for (i, n) in ddnnf.nodes().as_slice().iter().enumerate() {
-            if let Node::Or(children) = n {
-                or_free_vars[i] = vec![vec![]; children.len()];
-            }
-        }
-        Self {
-            root_free_vars: Vec::new(),
-            or_free_vars: OrFreeVariables::build(or_free_vars),
-        }
-    }
-
     /// Returns the root free variables.
     ///
     /// See the structure documentation for more information.
@@ -74,11 +59,6 @@ impl FreeVariables {
     #[must_use]
     pub fn or_free_vars(&self) -> &OrFreeVariables {
         &self.or_free_vars
-    }
-
-    /// Destructure this object, returning the root free variables and the OR free variables.
-    pub(crate) fn take_data(self) -> (Vec<Literal>, OrFreeVariables) {
-        (self.root_free_vars, self.or_free_vars)
     }
 }
 

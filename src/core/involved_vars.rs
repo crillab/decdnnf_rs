@@ -1,7 +1,19 @@
 use crate::Literal;
 use std::ops::{BitAndAssign, BitOrAssign, BitXorAssign};
+
 type IntType = u32;
+
 const N_BITS: usize = IntType::BITS as usize;
+
+const MASKS: [IntType; N_BITS] = {
+    let mut masks = [1; N_BITS];
+    let mut i = 0;
+    while i < N_BITS {
+        masks[i] <<= i;
+        i += 1;
+    }
+    masks
+};
 
 /// A type dedicated to the registration of the variables involved at some points.
 #[derive(Clone, Debug)]
@@ -22,14 +34,14 @@ impl InvolvedVars {
         let index = Literal::var_index(&l);
         let div = index / N_BITS;
         let rem = index % N_BITS;
-        self.data[div] |= 1 << rem;
+        self.data[div] |= MASKS[rem];
     }
 
     pub fn is_set(&self, l: Literal) -> bool {
         let index = Literal::var_index(&l);
         let div = index / N_BITS;
         let rem = index % N_BITS;
-        (self.data[div] >> rem) & 1 == 1
+        self.data[div] & MASKS[rem] > 0
     }
 
     pub fn any(&self) -> bool {
@@ -103,16 +115,16 @@ decl_all_bit_assign!(BitXorAssign, bitxor_assign);
 struct BitToLitIterator {
     n_vars: IntType,
     offset: IntType,
-    current: IntType,
+    data: IntType,
 }
 
 impl BitToLitIterator {
     #[allow(clippy::cast_possible_truncation)]
-    fn new(n_vars: usize, offset: usize, current: IntType) -> Self {
+    fn new(n_vars: usize, offset: usize, data: IntType) -> Self {
         Self {
             n_vars: n_vars as IntType,
             offset: offset as IntType,
-            current,
+            data,
         }
     }
 }
@@ -122,18 +134,12 @@ impl Iterator for BitToLitIterator {
 
     #[allow(clippy::cast_possible_truncation)]
     fn next(&mut self) -> Option<Self::Item> {
-        if self.current == 0 || self.offset >= self.n_vars {
+        let trailing = self.data.trailing_zeros();
+        if trailing == N_BITS as u32 || trailing + self.offset >= self.n_vars {
             None
         } else {
-            let n_zeroes = IntType::from(self.current.trailing_zeros());
-            self.offset += n_zeroes + 1;
-            self.current >>= n_zeroes + 1;
-            if self.offset > self.n_vars {
-                None
-            } else {
-                #[allow(clippy::cast_possible_wrap)]
-                Some(Literal::from(self.offset as isize))
-            }
+            self.data ^= MASKS[trailing as usize];
+            Some(Literal::from((self.offset + trailing + 1) as isize))
         }
     }
 }
@@ -159,5 +165,19 @@ mod tests {
             vec![] as Vec<Literal>,
             involved.iter_missing_literals().collect::<Vec<_>>(),
         );
+    }
+
+    #[test]
+    fn test_bit_to_lit_it_first_bit() {
+        let bits: IntType = 1;
+        let it = BitToLitIterator::new(N_BITS, 0, bits);
+        assert_eq!(it.collect::<Vec<_>>(), vec![Literal::from(1)]);
+    }
+
+    #[test]
+    fn test_bit_to_lit_it_last_bit() {
+        let bits: IntType = 1 << (N_BITS - 1);
+        let it = BitToLitIterator::new(N_BITS, 0, bits);
+        assert_eq!(it.collect::<Vec<_>>(), vec![Literal::from(N_BITS as isize)]);
     }
 }

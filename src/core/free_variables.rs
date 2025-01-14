@@ -156,11 +156,18 @@ impl OrFreeVariables {
             .map(|(_, length)| *length)
     }
 
-    /// Iterates over the free variables of a given disjunction node child.
+    /// Returns a slice of the free variables of a given disjunction node child.
     #[must_use]
     pub fn child_free_vars(&self, var: usize, child_index: usize) -> &[Literal] {
         let (start, length) = self.indices_and_lengths[var][child_index];
         &self.data[start..start + length]
+    }
+
+    /// Iterates over the free variables of the children of a given disjunction.
+    pub fn iter_child_free_vars(&self, var: usize) -> impl Iterator<Item = &[Literal]> + '_ {
+        self.indices_and_lengths[var]
+            .iter()
+            .map(|(start, length)| &self.data[*start..*start + *length])
     }
 
     /// Iterates mutably over the free variables of a given disjunction node child.

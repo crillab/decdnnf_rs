@@ -66,11 +66,11 @@ impl<'a> ModelCounter<'a> {
 
     fn get_or_compute_n_models(&self) -> &[Option<Integer>] {
         self.n_models.get_or_init(|| {
-            let (root_free_vars, or_children_free_vars_len) = self.free_vars_params();
+            let (n_root_free_vars, or_children_free_vars_len) = self.free_vars_params();
             let mut n_models = vec![None; self.ddnnf.nodes().as_slice().len()];
             compute_models_from(
                 self.ddnnf,
-                root_free_vars,
+                n_root_free_vars,
                 &or_children_free_vars_len,
                 NodeIndex::from(0),
                 &mut n_models,
@@ -80,10 +80,10 @@ impl<'a> ModelCounter<'a> {
         })
     }
 
-    fn free_vars_params(&self) -> (&[Literal], Vec<Vec<usize>>) {
+    fn free_vars_params(&self) -> (usize, Vec<Vec<usize>>) {
         if self.partial_models {
             (
-                &[],
+                0,
                 self.ddnnf
                     .nodes()
                     .as_slice()
@@ -99,31 +99,37 @@ impl<'a> ModelCounter<'a> {
             )
         } else {
             let free_variables = self.ddnnf.free_vars();
-            let or_children_free_vars_len = if let Some(assumps) = &self.assumptions {
-                (0..self.ddnnf.n_nodes())
-                    .map(|i| {
-                        free_variables
-                            .or_free_vars()
-                            .iter_child_free_vars(i)
-                            .map(|fv| {
-                                fv.iter()
-                                    .filter(|l| assumps[l.var_index()].is_none())
-                                    .count()
-                            })
-                            .collect::<Vec<_>>()
-                    })
-                    .collect::<Vec<_>>()
+            if let Some(assumps) = &self.assumptions {
+                let n_free_vars = |lits: &[Literal]| {
+                    lits.iter()
+                        .filter(|l| assumps[l.var_index()].is_none())
+                        .count()
+                };
+                (
+                    n_free_vars(free_variables.root_free_vars()),
+                    (0..self.ddnnf.n_nodes())
+                        .map(|i| {
+                            free_variables
+                                .or_free_vars()
+                                .iter_child_free_vars(i)
+                                .map(n_free_vars)
+                                .collect::<Vec<_>>()
+                        })
+                        .collect::<Vec<_>>(),
+                )
             } else {
-                (0..self.ddnnf.n_nodes())
-                    .map(|i| {
-                        free_variables
-                            .or_free_vars()
-                            .iter_child_free_vars_lengths(i)
-                            .collect::<Vec<_>>()
-                    })
-                    .collect::<Vec<_>>()
-            };
-            (free_variables.root_free_vars(), or_children_free_vars_len)
+                (
+                    free_variables.root_free_vars().len(),
+                    (0..self.ddnnf.n_nodes())
+                        .map(|i| {
+                            free_variables
+                                .or_free_vars()
+                                .iter_child_free_vars_lengths(i)
+                                .collect::<Vec<_>>()
+                        })
+                        .collect::<Vec<_>>(),
+                )
+            }
         }
     }
 
@@ -161,7 +167,7 @@ impl<'a> ModelCounter<'a> {
 
 fn compute_models_from<'a>(
     ddnnf: &'a DecisionDNNF,
-    root_free_vars: &[Literal],
+    n_root_free_vars: usize,
     or_children_free_vars_len: &[Vec<usize>],
     index: NodeIndex,
     n_models: &mut [Option<Integer>],
@@ -191,7 +197,7 @@ fn compute_models_from<'a>(
         let target = ddnnf.edges()[e].target();
         compute_models_from(
             ddnnf,
-            root_free_vars,
+            n_root_free_vars,
             or_children_free_vars_len,
             target,
             n_models,
@@ -218,7 +224,7 @@ fn compute_models_from<'a>(
         Node::False => Integer::ZERO,
     };
     if index == NodeIndex::from(0) {
-        n <<= root_free_vars.len();
+        n <<= n_root_free_vars;
     }
     n_models[usize::from(index)] = Some(n);
 }
@@ -377,5 +383,15 @@ mod tests {
         check(Some(vec![1, -2, 3]), 0, 0);
         check(Some(vec![1, 2, -3]), 1, 1);
         check(Some(vec![1, 2, 3]), 1, 1);
+    }
+
+    #[test]
+    fn test_count_under_assumptions_top() {
+        let instance = "t 1 0\n";
+        let mut ddnnf = D4Reader::default().read(instance.as_bytes()).unwrap();
+        ddnnf.update_n_vars(1);
+        assert_counts_under_assumptions("t 1 0\n", Some(1), 2, 1, Some(vec![]));
+        assert_counts_under_assumptions("t 1 0\n", Some(1), 1, 1, Some(vec![-1]));
+        assert_counts_under_assumptions("t 1 0\n", Some(1), 1, 1, Some(vec![1]));
     }
 }

@@ -46,13 +46,11 @@ impl<'a> ModelCounter<'a> {
     /// Set assumption literals, reducing the number of models.
     ///
     /// The only models to be considered are the ones that contain all the literals marked as assumptions.
-    /// This function may be called one.
     /// The set of assumptions must involved at most once each variable.
     ///
     /// # Panics
     ///
-    /// This function panics if it is called a second time on the same structure
-    /// or if the set of assumptions involves the same variable multiple times.
+    /// This function panics if the set of assumptions involves the same variable multiple times.
     pub fn set_assumptions(&mut self, assumptions: &[Literal]) {
         let mut assumps = vec![None; self.ddnnf.n_vars()];
         for a in assumptions {
@@ -63,10 +61,10 @@ impl<'a> ModelCounter<'a> {
             );
         }
         self.assumptions = Some(assumps);
+        self.n_models.take();
     }
 
     fn get_or_compute_n_models(&self) -> &[Option<Integer>] {
-        println!("assumptions: {:?}", self.assumptions);
         self.n_models.get_or_init(|| {
             let (root_free_vars, or_children_free_vars_len) = self.free_vars_params();
             let mut n_models = vec![None; self.ddnnf.nodes().as_slice().len()];
@@ -169,7 +167,6 @@ fn compute_models_from<'a>(
     n_models: &mut [Option<Integer>],
     assumptions: &Option<Vec<Option<bool>>>,
 ) {
-    println!("assumptions: {assumptions:?}");
     if n_models[usize::from(index)].is_some() {
         return;
     }
@@ -189,7 +186,6 @@ fn compute_models_from<'a>(
     };
     for e in edge_indices {
         if in_contradiction_with_assumptions(e) {
-            println!(">>> got contradiction");
             continue;
         }
         let target = ddnnf.edges()[e].target();
@@ -365,7 +361,6 @@ mod tests {
             assert_counts_under_assumptions(instance, None, models, paths, assumptions);
         };
         check(None, 4, 2);
-        println!();
         check(Some(vec![-1]), 2, 1);
         check(Some(vec![1]), 2, 1);
         check(Some(vec![-2]), 1, 1);

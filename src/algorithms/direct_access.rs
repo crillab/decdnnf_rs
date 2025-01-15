@@ -5,6 +5,10 @@ use crate::{
 use rug::Integer;
 
 /// An object that, given an (internally computed) complete order on the models of a [`DecisionDNNF`], allows to return the k-th model.
+///
+/// The order of the models is given by the structure of the formula.
+/// This implies that given the same formula the order will remain the same at each call,
+/// but it will change when considering an equivalent formula which has a different structure.
 pub struct DirectAccessEngine<'a> {
     model_counter: &'a ModelCounter<'a>,
 }

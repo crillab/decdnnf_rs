@@ -11,7 +11,7 @@ use rug::Integer;
 pub struct OrderedDirectAccessEngine<'a> {
     ddnnf: &'a DecisionDNNF,
     global_n_models: Integer,
-    order: &'a [Literal],
+    order: Vec<Literal>,
 }
 
 impl<'a> OrderedDirectAccessEngine<'a> {
@@ -22,8 +22,8 @@ impl<'a> OrderedDirectAccessEngine<'a> {
     /// # Errors
     ///
     /// An error is returned if the order is incorrect.
-    pub fn new(ddnnf: &'a DecisionDNNF, order: &'a [Literal]) -> Result<Self> {
-        let mut sorted = order.to_vec();
+    pub fn new(ddnnf: &'a DecisionDNNF, order: Vec<Literal>) -> Result<Self> {
+        let mut sorted = order.clone();
         sorted.sort_unstable_by_key(Literal::var_index);
         if ddnnf.n_vars() != order.len()
             || (0..ddnnf.n_vars())
@@ -43,6 +43,7 @@ impl<'a> OrderedDirectAccessEngine<'a> {
 
     /// Returns the model at the given index.
     #[must_use]
+    #[allow(clippy::missing_panics_doc)]
     pub fn model(&self, mut n: Integer) -> Option<Vec<Literal>> {
         if n > self.global_n_models {
             return None;
@@ -54,8 +55,9 @@ impl<'a> OrderedDirectAccessEngine<'a> {
             model.push(self.order[model.len()]);
             model_counter.set_assumptions(&model);
             let current_n_models = model_counter.global_count();
-            if current_n_models > &n {
-                model.last_mut().map(|l| l.flip());
+            if &n > current_n_models {
+                let popped = model.pop().unwrap();
+                model.push(popped.flip());
                 n -= current_n_models;
             }
         }
@@ -76,7 +78,7 @@ mod tests {
 
     fn compute_models_ordered(ddnnf: &DecisionDNNF, order: &[isize]) -> Vec<Vec<isize>> {
         let lit_order = order.iter().map(|i| Literal::from(*i)).collect::<Vec<_>>();
-        let engine = OrderedDirectAccessEngine::new(ddnnf, &lit_order).unwrap();
+        let engine = OrderedDirectAccessEngine::new(ddnnf, lit_order).unwrap();
         let model_counter = ModelCounter::new(engine.ddnnf(), false);
         let n_models = model_counter.global_count();
         let mut actual = Vec::with_capacity(n_models.to_usize_wrapping());
@@ -135,7 +137,7 @@ mod tests {
     fn test_wrong_order_missing_var() {
         let mut ddnnf = D4Reader::default().read("t 1 0".as_bytes()).unwrap();
         ddnnf.update_n_vars(2);
-        assert!(OrderedDirectAccessEngine::new(&ddnnf, &[Literal::from(1)]).is_err());
+        assert!(OrderedDirectAccessEngine::new(&ddnnf, vec![Literal::from(1)]).is_err());
     }
 
     #[test]
@@ -143,7 +145,8 @@ mod tests {
         let mut ddnnf = D4Reader::default().read("t 1 0".as_bytes()).unwrap();
         ddnnf.update_n_vars(2);
         assert!(
-            OrderedDirectAccessEngine::new(&ddnnf, &[Literal::from(1), Literal::from(3)]).is_err()
+            OrderedDirectAccessEngine::new(&ddnnf, vec![Literal::from(1), Literal::from(3)])
+                .is_err()
         );
     }
 
@@ -152,7 +155,8 @@ mod tests {
         let mut ddnnf = D4Reader::default().read("t 1 0".as_bytes()).unwrap();
         ddnnf.update_n_vars(2);
         assert!(
-            OrderedDirectAccessEngine::new(&ddnnf, &[Literal::from(1), Literal::from(1)]).is_err()
+            OrderedDirectAccessEngine::new(&ddnnf, vec![Literal::from(1), Literal::from(1)])
+                .is_err()
         );
     }
 }

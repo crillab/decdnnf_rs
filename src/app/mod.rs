@@ -6,6 +6,9 @@ pub(crate) mod command;
 
 mod common;
 
+mod direct_access;
+pub(crate) use direct_access::Command as DirectAccessCommand;
+
 mod model_computer;
 pub(crate) use model_computer::Command as ModelComputerCommand;
 

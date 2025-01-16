@@ -3,8 +3,8 @@
 mod app;
 
 use app::{
-    app_helper::AppHelper, command::Command, ModelComputerCommand, ModelCountingCommand,
-    ModelEnumerationCommand, SamplingCommand, TranslationCommand,
+    app_helper::AppHelper, command::Command, DirectAccessCommand, ModelComputerCommand,
+    ModelCountingCommand, ModelEnumerationCommand, SamplingCommand, TranslationCommand,
 };
 
 pub(crate) fn create_app_helper() -> AppHelper<'static> {
@@ -19,6 +19,7 @@ pub(crate) fn create_app_helper() -> AppHelper<'static> {
     );
     #[allow(unused_mut)]
     let mut commands: Vec<Box<dyn Command>> = vec![
+        Box::<DirectAccessCommand>::default(),
         Box::<ModelComputerCommand>::default(),
         Box::<ModelCountingCommand>::default(),
         Box::<ModelEnumerationCommand>::default(),

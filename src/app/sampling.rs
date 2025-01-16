@@ -2,7 +2,7 @@ use super::{cli_manager, common};
 use crate::app::model_writer::ModelWriter;
 use anyhow::Context;
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
-use decdnnf_rs::{DirectAccessEngine, Literal, ModelCounter, OrderedDirectAccessEngine};
+use decdnnf_rs::ModelCounter;
 use log::info;
 use rug::{rand::RandState, Integer};
 use rustc_hash::FxHashMap;
@@ -15,7 +15,6 @@ const CMD_NAME: &str = "sampling";
 
 const ARG_LIMIT: &str = "ARG_LIMIT";
 const ARG_DO_NOT_PRINT: &str = "ARG_DO_NOT_PRINT";
-const ARG_LEXICOGRAPHIC_ORDER: &str = "ARG_LEXICOGRAPHIC_ORDER";
 const ARG_SEED: &str = "ARG_SEED";
 
 impl<'a> super::command::Command<'a> for Command {
@@ -29,6 +28,7 @@ impl<'a> super::command::Command<'a> for Command {
             .setting(AppSettings::DisableVersion)
             .args(&common::args_input())
             .arg(cli_manager::logging_level_cli_arg())
+            .arg(super::direct_access::arg_lexicographic_order())
             .arg(
                 Arg::with_name(ARG_LIMIT)
                     .short("l")
@@ -36,12 +36,6 @@ impl<'a> super::command::Command<'a> for Command {
                     .empty_values(false)
                     .multiple(false)
                     .help("sets the maximal number of models to print"),
-            )
-            .arg(
-                Arg::with_name(ARG_LEXICOGRAPHIC_ORDER)
-                    .long("lexicographic-order")
-                    .takes_value(false)
-                    .help("applies a lexicographic order on the models"),
             )
             .arg(
                 Arg::with_name(ARG_SEED)
@@ -81,7 +75,7 @@ impl<'a> super::command::Command<'a> for Command {
             }
         }
         info!("sampling {n_samples} samples");
-        let engine = direct_access_engine(arg_matches, &model_counter);
+        let engine = super::direct_access::direct_access_engine(arg_matches, &model_counter);
         let mut counter = Integer::ZERO;
         let mut swapped: FxHashMap<Integer, Integer> = FxHashMap::default();
         let mut model_writer = ModelWriter::new_locked(
@@ -103,28 +97,5 @@ impl<'a> super::command::Command<'a> for Command {
         }
         model_writer.finalize();
         Ok(())
-    }
-}
-
-fn direct_access_engine<'a>(
-    arg_matches: &ArgMatches<'_>,
-    model_counter: &'a ModelCounter,
-) -> Box<dyn Fn(Integer) -> Vec<Option<Literal>> + 'a> {
-    if arg_matches.is_present(ARG_LEXICOGRAPHIC_ORDER) {
-        let order = (1..=model_counter.ddnnf().n_vars())
-            .map(|i| Literal::from(-isize::try_from(i).unwrap()))
-            .collect::<Vec<_>>();
-        let engine = OrderedDirectAccessEngine::new(model_counter.ddnnf(), order).unwrap();
-        Box::new(move |i| {
-            engine
-                .model(i)
-                .unwrap()
-                .iter()
-                .map(|l| Some(*l))
-                .collect::<Vec<_>>()
-        })
-    } else {
-        let engine = DirectAccessEngine::new(model_counter);
-        Box::new(move |i| engine.model(i).unwrap())
     }
 }

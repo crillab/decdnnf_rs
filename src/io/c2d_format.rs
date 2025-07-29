@@ -44,16 +44,20 @@ impl Writer {
     where
         W: Write,
     {
+        let write_single_child = |writer_data: &mut C2DFormatWriterData<W>,
+                                  edge_index: EdgeIndex| {
+            let edge = &writer_data.ddnnf.edges()[edge_index];
+            let merged_propagations = propagations
+                .iter()
+                .chain(edge.propagated())
+                .copied()
+                .collect::<Vec<_>>();
+            Self::write_from(writer_data, edge.target(), &merged_propagations)
+        };
         match &writer_data.ddnnf.nodes()[node_index] {
             Node::And(v) | Node::Or(v) => {
                 if let &[e] = &v[..] {
-                    let edge = &writer_data.ddnnf.edges()[e];
-                    let merged_propagations = propagations
-                        .iter()
-                        .chain(edge.propagated())
-                        .copied()
-                        .collect::<Vec<_>>();
-                    return Self::write_from(writer_data, edge.target(), &merged_propagations);
+                    return write_single_child(writer_data, e);
                 }
             }
             _ => {}
@@ -77,7 +81,17 @@ impl Writer {
                 children_new_indices.append(&mut propagation_new_indices);
                 writer_data.write_and(children_new_indices)
             }
-            Node::Or(children_nodes) => Self::write_or(writer_data, children_nodes, propagations),
+            Node::Or(children_nodes) => {
+                debug_assert_eq!(2, children_nodes.len());
+                if let Some(pos) = children_nodes.iter().position(|edge_index| {
+                    let edge = &writer_data.ddnnf.edges()[*edge_index];
+                    let child = &writer_data.ddnnf.nodes()[edge.target()];
+                    matches!(child, Node::False)
+                }) {
+                    return write_single_child(writer_data, children_nodes[1 - pos]);
+                }
+                Self::write_or(writer_data, children_nodes, propagations)
+            }
             Node::True => {
                 if propagations.is_empty() {
                     writer_data.write_true()
@@ -345,6 +359,18 @@ mod tests {
         assert_translation(
             "o 1 0\no 2 0\nt 3 0\n1 2 -1 2 0\n1 2 1 -3 0\n2 3 -4 5 0\n2 3 4 -5 0",
             "nnf 14 14 5\nL 4\nL -5\nA 2 0 1\nL -4\nL 5\nA 2 3 4\nO 4 2 2 5\nL 1\nL -3\nA 3 6 7 8\nL -1\nL 2\nA 3 6 10 11\nO 1 2 9 12\n",
+        );
+    }
+
+    #[test]
+    fn test_determinism_with_false() {
+        assert_translation(
+            "o 1 0\nt 2 0\nf 3 0\n1 2 -1 0\n1 3 0\n",
+            "nnf 1 0 1\nL -1\n",
+        );
+        assert_translation(
+            "o 1 0\nf 2 0\nt 3 0\n1 2 0\n1 3 -1 0\n",
+            "nnf 1 0 1\nL -1\n",
         );
     }
 }

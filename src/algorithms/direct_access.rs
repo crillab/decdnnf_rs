@@ -23,7 +23,7 @@ impl<'a> DirectAccessEngine<'a> {
     }
 }
 
-impl<'a> DirectAccessEngine<'a> {
+impl DirectAccessEngine<'_> {
     /// Returns the number of models of the formula.
     #[must_use]
     pub fn n_models(&self) -> &Integer {

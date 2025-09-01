@@ -132,7 +132,7 @@ impl BitToLitIterator {
 impl Iterator for BitToLitIterator {
     type Item = Literal;
 
-    #[allow(clippy::cast_possible_truncation)]
+    #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
     fn next(&mut self) -> Option<Self::Item> {
         let trailing = self.data.trailing_zeros();
         if trailing == N_BITS as u32 || trailing + self.offset >= self.n_vars {
@@ -175,6 +175,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::cast_possible_wrap)]
     fn test_bit_to_lit_it_last_bit() {
         let bits: IntType = 1 << (N_BITS - 1);
         let it = BitToLitIterator::new(N_BITS, 0, bits);

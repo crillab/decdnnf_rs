@@ -1,3 +1,5 @@
+//! Integration tests for `decdnnf_rs`.
+
 use assert_cmd::{assert::Assert, Command};
 use predicates::prelude::predicate;
 use std::io::Write;

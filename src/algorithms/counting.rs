@@ -74,7 +74,7 @@ impl<'a> ModelCounter<'a> {
                 &or_children_free_vars_len,
                 NodeIndex::from(0),
                 &mut n_models,
-                &self.assumptions,
+                self.assumptions.as_deref(),
             );
             n_models
         })
@@ -171,7 +171,7 @@ fn compute_models_from<'a>(
     or_children_free_vars_len: &[Vec<usize>],
     index: NodeIndex,
     n_models: &mut [Option<Integer>],
-    assumptions: &Option<Vec<Option<bool>>>,
+    assumptions: Option<&[Option<bool>]>,
 ) {
     if n_models[usize::from(index)].is_some() {
         return;

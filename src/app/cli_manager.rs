@@ -197,7 +197,7 @@ mod tests {
     }
 
     impl<'a> Command<'a> for LocalCommand {
-        fn name(&self) -> &str {
+        fn name(&self) -> &'static str {
             "local_command_name"
         }
 

@@ -33,6 +33,10 @@ Another one of interest is `--n-vars`.
 Since the output format of d4 (which is the default input format of decdnnf_rs) does not provide the number of variables of the problems, this number cannot be deduced if it is more important than the highest variable index in use.
 Setting `--n-vars` allows to override the number of variables returned by the parser, which is set to the highest variable index.
 
+By default, decdnnf_rs partially checks the correctness on the input Decision-DNNF, in particular the decomposability property of the disjunction and the determinism of the disjunction node.
+However, these checks may consume some time.
+In case you are sure of the correctness of the formula, you can skip these tests by adding the `--do-not-check` flag.
+
 ## Translate a d4 Decision-DNNF into a c2d Decision-DNNF
 
 Use the `translation` command:

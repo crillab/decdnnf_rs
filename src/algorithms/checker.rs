@@ -32,7 +32,7 @@ use crate::{
 ///         println!("warning {i}: {w}");
 ///     }
 /// }
-/// # check_decision_dnnf(&decdnnf_rs::D4Reader::read("t 1 0".as_bytes()).unwrap())
+/// # check_decision_dnnf(&decdnnf_rs::D4Reader::default().read("t 1 0".as_bytes()).unwrap())
 /// ```
 #[derive(Default)]
 pub struct DecisionDNNFChecker {
@@ -92,7 +92,7 @@ impl DecisionDNNFChecker {
                     if let Some(ref mut u) = union {
                         let mut intersection = involved_in_child.clone();
                         intersection.set_literals(edge.propagated());
-                        intersection.and_assign(u);
+                        intersection &= u;
                         if intersection.any() {
                             result.error = Some(format!(
                                 "AND children share variables (AND node index is {})",
@@ -173,7 +173,7 @@ impl DecisionDNNFChecker {
         propagated: &[Literal],
     ) {
         if let Some(ref mut u) = opt_union {
-            u.or_assign(involved);
+            *u |= involved;
             u.set_literals(propagated);
         } else {
             *opt_union = Some(involved.clone());
@@ -191,10 +191,14 @@ mod tests {
     use super::*;
     use crate::D4Reader;
 
+    fn read_correct_ddnnf(str_ddnnf: &str) -> DecisionDNNF {
+        D4Reader::default().read(&mut str_ddnnf.as_bytes()).unwrap()
+    }
+
     #[test]
     fn test_not_decomposable() {
         let str_ddnnf = "a 1 0\nt 2 0\n1 2 1 0\n1 2 -1 0";
-        let ddnnf = D4Reader::read(str_ddnnf.as_bytes()).unwrap();
+        let ddnnf = read_correct_ddnnf(str_ddnnf);
         let result = DecisionDNNFChecker::check(&ddnnf);
         assert_eq!(
             "AND children share variables (AND node index is 0)",
@@ -205,7 +209,7 @@ mod tests {
     #[test]
     fn test_not_determinist() {
         let str_ddnnf = "o 1 0\nt 2 0\n1 2 1 0\n1 2 1 0";
-        let ddnnf = D4Reader::read(str_ddnnf.as_bytes()).unwrap();
+        let ddnnf = read_correct_ddnnf(str_ddnnf);
         let result = DecisionDNNFChecker::check(&ddnnf);
         assert!(result.error.is_none());
         assert_eq!(
@@ -218,7 +222,7 @@ mod tests {
     fn test_ok() {
         let str_ddnnf =
             "a 1 0\no 2 0\no 3 0\nt 4 0\n1 2 0\n1 3 0\n2 4 -1 0\n2 4 1 0\n3 4 -2 0\n3 4 2 0\n";
-        let ddnnf = D4Reader::read(str_ddnnf.as_bytes()).unwrap();
+        let ddnnf = read_correct_ddnnf(str_ddnnf);
         let result = DecisionDNNFChecker::check(&ddnnf);
         assert!(result.error.is_none());
     }
@@ -226,7 +230,7 @@ mod tests {
     #[test]
     fn test_or_determinism_with_false_node() {
         let str_ddnnf = "o 1 0\nt 2 0\nf 3 0\n1 2 1 0\n1 3 0";
-        let ddnnf = D4Reader::read(str_ddnnf.as_bytes()).unwrap();
+        let ddnnf = read_correct_ddnnf(str_ddnnf);
         let result = DecisionDNNFChecker::check(&ddnnf);
         assert!(result.error.is_none());
     }

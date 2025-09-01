@@ -1,8 +1,10 @@
+use crate::FreeVariables;
 use anyhow::{anyhow, Result};
 use std::{
     fmt::{Debug, Display},
     ops::Index,
     str::FromStr,
+    sync::OnceLock,
 };
 
 /// A structure representing a literal.
@@ -48,6 +50,13 @@ impl Literal {
     #[must_use]
     pub fn flip(&self) -> Literal {
         Literal(self.0 ^ 1)
+    }
+
+    /// Sets the current literal polarity to false.
+    ///
+    /// This has no effect if the literal has already a false polarity.
+    pub fn set_negative(&mut self) {
+        self.0 |= 1;
     }
 }
 
@@ -164,6 +173,7 @@ pub struct DecisionDNNF {
     n_vars: usize,
     nodes: NodeVec,
     edges: EdgeVec,
+    free_vars: OnceLock<FreeVariables>,
 }
 
 impl DecisionDNNF {
@@ -172,6 +182,7 @@ impl DecisionDNNF {
             n_vars,
             nodes: NodeVec(nodes),
             edges: EdgeVec(edges),
+            free_vars: OnceLock::new(),
         }
     }
 
@@ -205,15 +216,34 @@ impl DecisionDNNF {
         &self.nodes
     }
 
+    /// Returns the number of nodes of the formula.
+    #[must_use]
+    pub fn n_nodes(&self) -> usize {
+        self.nodes.as_slice().len()
+    }
+
     pub(crate) fn edges(&self) -> &EdgeVec {
         &self.edges
+    }
+
+    /// Returns the number of edges of the formula.
+    #[must_use]
+    pub fn n_edges(&self) -> usize {
+        self.edges.as_slice().len()
+    }
+
+    /// Returns the free variables.
+    ///
+    /// See [`FreeVariables`] for more information.
+    pub fn free_vars(&self) -> &FreeVariables {
+        self.free_vars.get_or_init(|| FreeVariables::compute(self))
     }
 }
 
 macro_rules! index_type {
     ($type_name:ident, $index_name:ident, $vec_index_name:ident) => {
         #[doc = concat!("An index type dedicated to [`", stringify!($type_name), "`] objects.")]
-        #[derive(Copy, Clone, Debug)]
+        #[derive(Copy, Clone, Debug, PartialEq, Eq)]
         pub struct $index_name(usize);
 
         impl From<usize> for $index_name {

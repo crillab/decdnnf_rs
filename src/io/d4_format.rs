@@ -14,14 +14,24 @@ use std::{
 /// The output format of d4 is an extension of the initial format output by c2d.
 /// The description of the format is available on the [d4](https://github.com/crillab/d4) repository.
 ///
-/// This reader performs syntactic checks (i.e. the input data follows the format).
+/// By default, this reader performs syntactic checks (i.e. the input data follows the format).
 /// It also checks that the described formula has a single root and no cycles.
+/// This behavior can be changed by calling [`do_not_check`](Self::set_do_not_check) before [`read`](Self::read).
+///
 /// The index of the root must be 1. The root must be the first node that is described.
 /// The decomposability of the conjunction nodes and the determinism of the disjunction nodes are not check by this reader.
 /// See [`DecisionDNNFChecker`](crate::DecisionDNNFChecker) if you need to assert these properties.
-pub struct Reader;
+#[derive(Default)]
+pub struct Reader {
+    do_not_check: bool,
+}
 
 impl Reader {
+    /// Sets whether the reader must activate its checks or not.
+    pub fn set_do_not_check(&mut self, do_not_check: bool) {
+        self.do_not_check = do_not_check;
+    }
+
     /// Reads an instance and returns it.
     ///
     /// # Errors
@@ -31,18 +41,19 @@ impl Reader {
     /// # Example
     ///
     /// ```
-    /// use decdnnf_rs::{BottomUpTraversal, ModelCountingVisitor, DecisionDNNF, D4Reader};
+    /// use decdnnf_rs::{DecisionDNNF, D4Reader, ModelCounter};
     /// use rug::Integer;
     ///
     /// fn load_decision_dnnf_and_model_count(str_ddnnf: &str) -> Result<(DecisionDNNF, Integer), String> {
-    ///     let ddnnf = D4Reader::read(str_ddnnf.as_bytes()).map_err(|e| e.to_string())?;
-    ///     let traversal = BottomUpTraversal::new(Box::<ModelCountingVisitor>::default());
-    ///     let mc_data = traversal.traverse(&ddnnf);
-    ///     Ok((ddnnf, mc_data.n_models().clone()))
+    ///     let reader = D4Reader::default();
+    ///     let ddnnf = reader.read(str_ddnnf.as_bytes()).map_err(|e| e.to_string())?;
+    ///     let counter = ModelCounter::new(&ddnnf, false);
+    ///     let n_models = counter.global_count().clone();
+    ///     Ok((ddnnf, n_models))
     /// }
     /// # load_decision_dnnf_and_model_count("t 1 0").unwrap();
     /// ```
-    pub fn read<R>(reader: R) -> Result<DecisionDNNF>
+    pub fn read<R>(&self, reader: R) -> Result<DecisionDNNF>
     where
         R: Read,
     {
@@ -88,7 +99,9 @@ impl Reader {
         if reader_data.nodes.is_empty() {
             return Err(anyhow!("formula is empty"));
         }
-        reader_data.check_connectivity().context(context)?;
+        if !self.do_not_check {
+            reader_data.check_connectivity().context(context)?;
+        }
         Ok(DecisionDNNF::from_raw_data(
             reader_data.n_vars,
             reader_data.nodes,
@@ -121,19 +134,25 @@ impl Reader {
         let str_target_index = words.next().ok_or(anyhow!("missing target index"))?;
         let target_index =
             usize::from_str(str_target_index).context("while parsing the target index")?;
-        let mut propagated = Vec::new();
-        loop {
-            match words.next() {
-                Some("0") => break,
-                Some(w) if isize::from_str(w).is_ok() => {
-                    propagated.push(Literal::from(isize::from_str(w).unwrap()));
+        let mut got_zero = false;
+        let propagated = words
+            .filter_map(|w| {
+                if got_zero {
+                    Some(Err(anyhow!("unexpected content after 0")))
+                } else if w == "0" {
+                    got_zero = true;
+                    None
+                } else {
+                    Some(
+                        isize::from_str(w)
+                            .map(Literal::from)
+                            .map_err(|_| anyhow!(r#"expected a literal, got "{w}""#)),
+                    )
                 }
-                Some(w) => return Err(anyhow!(r#"expected a literal, got "{w}""#)),
-                None => return Err(anyhow!("missing final 0")),
-            }
-        }
-        if words.next().is_some() {
-            return Err(anyhow!("unexpected content after 0"));
+            })
+            .collect::<Result<Vec<Literal>>>()?;
+        if !got_zero {
+            return Err(anyhow!("missing final 0"));
         }
         reader_data.add_new_edge(source_index, target_index, propagated)
     }
@@ -165,7 +184,14 @@ impl D4FormatReaderData {
         mut propagated: Vec<Literal>,
     ) -> Result<()> {
         propagated.sort_unstable_by_key(Literal::var_index);
-        propagated.dedup();
+        if !propagated.is_empty() {
+            self.n_vars = usize::max(self.n_vars, propagated.last().unwrap().var_index() + 1);
+        }
+        let old_len = propagated.len();
+        propagated.dedup_by_key(|l| l.var_index());
+        if propagated.len() != old_len {
+            return Err(anyhow!("a variable is propagated multiple times"));
+        }
         if source_index > self.nodes.len() {
             return Err(anyhow!(
                 "wrong source index; max is {}, got {source_index}",
@@ -181,15 +207,6 @@ impl D4FormatReaderData {
         if source_index == target_index {
             return Err(anyhow!("source and target index must be different"));
         }
-        self.n_vars = usize::max(
-            self.n_vars,
-            propagated
-                .iter()
-                .map(Literal::var_index)
-                .max()
-                .map(|i| i + 1)
-                .unwrap_or_default(),
-        );
         let edge = Edge::from_raw_data((target_index - 1).into(), propagated);
         self.edges.push(edge);
         self.nodes[source_index - 1].add_edge((self.edges.len() - 1).into())?;
@@ -242,7 +259,7 @@ mod tests {
     use super::*;
 
     fn assert_error(instance: &str, expected_error: &str) {
-        match Reader::read(&mut instance.as_bytes()) {
+        match Reader::default().read(&mut instance.as_bytes()) {
             Ok(_) => panic!(),
             Err(e) => assert_eq!(expected_error, format!("{}", e.root_cause())),
         }
@@ -350,10 +367,24 @@ mod tests {
     }
 
     #[test]
+    fn test_do_not_check() {
+        let mut reader = Reader::default();
+        reader.set_do_not_check(true);
+        assert!(reader.read(&mut "f 1 0\nt 2 0\n".as_bytes()).is_ok());
+        assert!(reader
+            .read(&mut "a 1 0\na 2 0\n1 2 0\n2 1 0\n".as_bytes())
+            .is_ok());
+    }
+
+    fn read_correct_ddnnf(str_ddnnf: &str) -> DecisionDNNF {
+        Reader::default().read(&mut str_ddnnf.as_bytes()).unwrap()
+    }
+
+    #[test]
     fn test_ok() {
         let instance =
             "a 1 0\no 2 0\no 3 0\nt 4 0\n1 2 0\n1 3 0\n2 4 -1 0\n2 4 1 0\n3 4 -2 0\n3 4 2 0\n";
-        let ddnnf = Reader::read(&mut instance.as_bytes()).unwrap();
+        let ddnnf = read_correct_ddnnf(instance);
         assert_eq!(2, ddnnf.n_vars());
         assert_eq!(4, ddnnf.nodes().as_slice().len());
         assert_eq!(6, ddnnf.edges().as_slice().len());
@@ -368,7 +399,7 @@ mod tests {
         2 3 -1 -2 0
         2 3 1 0
         1 2 0";
-        let ddnnf = Reader::read(&mut instance.as_bytes()).unwrap();
+        let ddnnf = read_correct_ddnnf(instance);
         assert_eq!(2, ddnnf.n_vars());
         assert_eq!(3, ddnnf.nodes().as_slice().len());
         assert_eq!(3, ddnnf.edges().as_slice().len());
@@ -377,7 +408,7 @@ mod tests {
     #[test]
     fn test_true_instance() {
         let instance = "t 1 0";
-        let ddnnf = Reader::read(&mut instance.as_bytes()).unwrap();
+        let ddnnf = read_correct_ddnnf(instance);
         assert_eq!(0, ddnnf.n_vars());
         assert_eq!(1, ddnnf.nodes().as_slice().len());
         assert_eq!(0, ddnnf.edges().as_slice().len());

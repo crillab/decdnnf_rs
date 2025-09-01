@@ -3,8 +3,8 @@
 mod app;
 
 use app::{
-    app_helper::AppHelper, command::Command, ModelComputerCommand, ModelCountingCommand,
-    ModelEnumerationCommand, TranslationCommand,
+    app_helper::AppHelper, command::Command, DirectAccessCommand, ModelComputerCommand,
+    ModelCountingCommand, ModelEnumerationCommand, SamplingCommand, TranslationCommand,
 };
 
 pub(crate) fn create_app_helper() -> AppHelper<'static> {
@@ -17,12 +17,17 @@ pub(crate) fn create_app_helper() -> AppHelper<'static> {
         authors,
         "decdnnf-rs, a library for Decision-DNNFs.",
     );
-    let commands: Vec<Box<dyn Command>> = vec![
+    #[allow(unused_mut)]
+    let mut commands: Vec<Box<dyn Command>> = vec![
+        Box::<DirectAccessCommand>::default(),
         Box::<ModelComputerCommand>::default(),
         Box::<ModelCountingCommand>::default(),
         Box::<ModelEnumerationCommand>::default(),
+        Box::<SamplingCommand>::default(),
         Box::<TranslationCommand>::default(),
     ];
+    #[cfg(feature = "mpi")]
+    commands.push(Box::<app::ModelEnumerationMPICommand>::default());
     for c in commands {
         app.add_command(c);
     }

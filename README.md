@@ -63,6 +63,28 @@ decdnnf_rs model-enumeration -i instance.nnf
 This commands admits multiple options allowing to set the number of variables (in case it is higher than the highest index in the input formula), use a compact output or use an enumeration algorithm based on a decision tree.
 Run `decdnnf_rs model-enumeration -h` for more information.
 
+## Direct access to a model
+
+Use the `direct-access` command:
+
+```bash
+decdnnf_rs direct-access --index 5 -i instance.nnf
+```
+
+The order of the models is determined by the structure of the formula by default, and may change with new versions of the tool.
+Adding the `--lexicographic-order` flag is an effective way to prevent this.
+This flag instructs the tool to sort the models according to the lexicographic order, although this approach does result in a longer processing time.
+
+## Uniform sampling
+
+Use the `sampling` command:
+
+```bash
+decdnnf_rs sampling -l 5 -i instance.nnf
+```
+
+The indices associated with the models work in the same way as for direct access.
+
 ## License
 
 Decdnnf-rs is developed at CRIL (Univ. Artois & CNRS).

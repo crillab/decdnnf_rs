@@ -191,6 +191,15 @@ impl DecisionDNNF {
         }
     }
 
+    /// Creates a new (sub)formula from an existing one.
+    ///
+    /// The new one is rooted by the node of the initial formula which index is given by the parameter `root`.
+    /// The number of variables considered in the subformula is the same than the one of the initial formula.
+    #[must_use]
+    pub fn subformula(&self, root: NodeIndex) -> Self {
+        SubformulaBuilder::build_from_new_root(self, root).into()
+    }
+
     /// Updates the number of variables.
     ///
     /// The new number must be higher than the current number of variables.
@@ -253,6 +262,72 @@ impl DecisionDNNF {
     }
 }
 
+struct SubformulaBuilder<'a> {
+    formula: &'a DecisionDNNF,
+    old_to_new_node_index: Vec<Option<usize>>,
+    new_nodes: Vec<Node>,
+    new_edges: Vec<Edge>,
+}
+
+impl<'a> SubformulaBuilder<'a> {
+    fn build_from_new_root(decision_dnnf: &'a DecisionDNNF, root: NodeIndex) -> Self {
+        let mut builder = Self {
+            formula: decision_dnnf,
+            old_to_new_node_index: vec![None; decision_dnnf.n_nodes()],
+            new_nodes: vec![],
+            new_edges: vec![],
+        };
+        builder.copy_nodes_from(root);
+        builder.copy_edges();
+        builder
+    }
+
+    fn copy_nodes_from(&mut self, old_index: NodeIndex) {
+        if self.old_to_new_node_index[usize::from(old_index)].is_some() {
+            return;
+        }
+        self.old_to_new_node_index[usize::from(old_index)] = Some(self.new_nodes.len());
+        self.new_nodes.push(self.formula.nodes()[old_index].clone());
+        match &self.formula.nodes()[old_index] {
+            Node::And(edge_indices) | Node::Or(edge_indices) => {
+                for edge_index in edge_indices {
+                    self.copy_nodes_from(self.formula.edges()[*edge_index].target());
+                }
+            }
+            Node::True | Node::False => {}
+        }
+    }
+
+    fn copy_edges(&mut self) {
+        for node in &mut self.new_nodes {
+            match node {
+                Node::And(edge_indices) | Node::Or(edge_indices) => {
+                    for edge_index in edge_indices {
+                        let mut new_edge = self.formula.edges()[*edge_index].clone();
+                        new_edge.target = self.old_to_new_node_index[usize::from(new_edge.target)]
+                            .unwrap()
+                            .into();
+                        *edge_index = self.new_edges.len().into();
+                        self.new_edges.push(new_edge);
+                    }
+                }
+                Node::True | Node::False => {}
+            }
+        }
+    }
+}
+
+impl From<SubformulaBuilder<'_>> for DecisionDNNF {
+    fn from(builder: SubformulaBuilder) -> Self {
+        DecisionDNNF {
+            n_vars: builder.formula.n_vars,
+            nodes: NodeVec(builder.new_nodes),
+            edges: EdgeVec(builder.new_edges),
+            free_vars: OnceLock::new(),
+        }
+    }
+}
+
 macro_rules! index_type {
     ($type_name:ident, $index_name:ident, $vec_index_name:ident) => {
         #[doc = concat!("An index type dedicated to [`", stringify!($type_name), "`] objects.")]
@@ -272,7 +347,7 @@ macro_rules! index_type {
         }
 
         #[doc = concat!("A vector of [`", stringify!($type_name), "`] objects.")]
-        #[derive(Debug)]
+        #[derive(Debug, Clone, PartialEq, Eq)]
         pub struct $vec_index_name(Vec<$type_name>);
 
         impl $vec_index_name {
@@ -314,3 +389,90 @@ macro_rules! index_type {
 
 index_type!(Edge, EdgeIndex, EdgeVec);
 index_type!(Node, NodeIndex, NodeVec);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_subformula_trivial() {
+        let old = DecisionDNNF::from_raw_data(
+            2,
+            vec![Node::And(vec![0.into()]), Node::True],
+            vec![Edge::from_raw_data(1.into(), vec![Literal::from(1)])],
+        );
+        let new = old.subformula(1.into());
+        assert_eq!(new.n_vars(), old.n_vars());
+        assert_eq!(new.nodes.as_slice(), &[Node::True]);
+        assert_eq!(new.edges.as_slice(), &[]);
+    }
+
+    #[test]
+    fn test_subformula_and() {
+        let old = DecisionDNNF::from_raw_data(
+            3,
+            vec![
+                Node::And(vec![0.into()]),
+                Node::And(vec![1.into(), 2.into()]),
+                Node::True,
+            ],
+            vec![
+                Edge::from_raw_data(1.into(), vec![Literal::from(1)]),
+                Edge::from_raw_data(2.into(), vec![Literal::from(2)]),
+                Edge::from_raw_data(2.into(), vec![Literal::from(3)]),
+            ],
+        );
+        let new = old.subformula(1.into());
+        assert_eq!(old.n_vars(), new.n_vars());
+        assert_eq!(
+            &[Node::And(vec![0.into(), 1.into()]), Node::True],
+            new.nodes.as_slice(),
+        );
+        assert_eq!(
+            &[
+                Edge::from_raw_data(1.into(), vec![Literal::from(2)]),
+                Edge::from_raw_data(1.into(), vec![Literal::from(3)]),
+            ],
+            new.edges.as_slice(),
+        );
+    }
+
+    #[test]
+    fn test_subformula_and_chain() {
+        let old = DecisionDNNF::from_raw_data(
+            3,
+            vec![
+                Node::And(vec![0.into()]),
+                Node::And(vec![1.into()]),
+                Node::And(vec![2.into()]),
+                Node::And(vec![3.into()]),
+                Node::True,
+            ],
+            vec![
+                Edge::from_raw_data(1.into(), vec![Literal::from(1)]),
+                Edge::from_raw_data(2.into(), vec![Literal::from(2)]),
+                Edge::from_raw_data(3.into(), vec![Literal::from(3)]),
+                Edge::from_raw_data(4.into(), vec![Literal::from(4)]),
+            ],
+        );
+        let new = old.subformula(1.into());
+        assert_eq!(old.n_vars(), new.n_vars());
+        assert_eq!(
+            &[
+                Node::And(vec![0.into()]),
+                Node::And(vec![1.into()]),
+                Node::And(vec![2.into()]),
+                Node::True,
+            ],
+            new.nodes.as_slice(),
+        );
+        assert_eq!(
+            &[
+                Edge::from_raw_data(1.into(), vec![Literal::from(2)]),
+                Edge::from_raw_data(2.into(), vec![Literal::from(3)]),
+                Edge::from_raw_data(3.into(), vec![Literal::from(4)]),
+            ],
+            new.edges.as_slice(),
+        );
+    }
+}

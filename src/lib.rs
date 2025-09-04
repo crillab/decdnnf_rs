@@ -7,6 +7,7 @@ pub use algorithms::ModelCounter;
 pub use algorithms::ModelEnumerator;
 pub use algorithms::ModelFinder;
 pub use algorithms::OrderedDirectAccessEngine;
+pub use algorithms::OrphanFinder;
 
 mod core;
 pub use core::DecisionDNNF;

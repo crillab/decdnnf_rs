@@ -1,5 +1,5 @@
-use crate::core::{Edge, Node, NodeIndex};
-use crate::{DecisionDNNF, Literal};
+use crate::core::{Edge, Node};
+use crate::{DecisionDNNF, Literal, OrphanFinder};
 use anyhow::{anyhow, Context, Result};
 use std::io::{BufWriter, Write};
 use std::str::FromStr;
@@ -100,14 +100,19 @@ impl Reader {
         if reader_data.nodes.is_empty() {
             return Err(anyhow!("formula is empty"));
         }
+        let ddnnf =
+            DecisionDNNF::from_raw_data(reader_data.n_vars, reader_data.nodes, reader_data.edges);
         if !self.do_not_check {
-            reader_data.check_connectivity().context(context)?;
+            let connectivity_checker = OrphanFinder::search(&ddnnf).context(context)?;
+            if let Some(i) = connectivity_checker.orphans_nodes().first() {
+                return Err(anyhow!(
+                    "no path to the node with index {}",
+                    usize::from(*i) + 1
+                ))
+                .context(context)?;
+            }
         }
-        Ok(DecisionDNNF::from_raw_data(
-            reader_data.n_vars,
-            reader_data.nodes,
-            reader_data.edges,
-        ))
+        Ok(ddnnf)
     }
 
     fn add_new_node(
@@ -265,46 +270,6 @@ impl D4FormatReaderData {
         let edge = Edge::from_raw_data((target_index - 1).into(), propagated);
         self.edges.push(edge);
         self.nodes[source_index - 1].add_edge((self.edges.len() - 1).into())?;
-        Ok(())
-    }
-
-    fn check_connectivity(&self) -> Result<()> {
-        let mut seen_once = vec![false; self.nodes.len()];
-        let mut seen_on_path = vec![false; self.nodes.len()];
-        self.check_connectivity_from(&mut seen_once, &mut seen_on_path, 0.into())?;
-        match seen_once.iter().position(|b| !b) {
-            Some(i) => Err(anyhow!("no path to the node with index {}", i + 1)),
-            None => Ok(()),
-        }
-    }
-
-    fn check_connectivity_from(
-        &self,
-        seen_once: &mut [bool],
-        seen_on_path: &mut [bool],
-        node_index: NodeIndex,
-    ) -> Result<()> {
-        if seen_on_path[usize::from(node_index)] {
-            return Err(anyhow!("cycle detected"));
-        }
-        if seen_once[usize::from(node_index)] {
-            return Ok(());
-        }
-        seen_on_path[usize::from(node_index)] = true;
-        seen_once[usize::from(node_index)] = true;
-        match &self.nodes[usize::from(node_index)] {
-            Node::And(v) | Node::Or(v) => {
-                v.iter().try_for_each(|e| {
-                    self.check_connectivity_from(
-                        seen_once,
-                        seen_on_path,
-                        self.edges[usize::from(*e)].target(),
-                    )
-                })?;
-            }
-            Node::True | Node::False => {}
-        }
-        seen_on_path[usize::from(node_index)] = false;
         Ok(())
     }
 }

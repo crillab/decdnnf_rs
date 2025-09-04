@@ -99,7 +99,7 @@ impl Debug for Literal {
 /// A Decision-DNNF node.
 ///
 /// Note that there aren't literal nodes: they are encoded as arcs targeting true nodes and propagated literals.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Node {
     /// A conjunction node, associated with the edges to its children.
     And(Vec<EdgeIndex>),
@@ -116,7 +116,7 @@ impl Node {
         match self {
             Node::And(v) | Node::Or(v) => v.push(index),
             Node::False | Node::True => return Err(anyhow!("cannot add an edge from a leaf node")),
-        };
+        }
         Ok(())
     }
 }
@@ -136,7 +136,7 @@ impl FromStr for Node {
 }
 
 /// An edge targets a node and propagates literals, in the spirit of recent [d4](https://github.com/crillab/d4) versions.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Edge {
     target: NodeIndex,
     propagated: Vec<Literal>,
@@ -157,6 +157,11 @@ impl Edge {
 
     pub(crate) fn from_raw_data(target: NodeIndex, propagated: Vec<Literal>) -> Self {
         Self { target, propagated }
+    }
+
+    /// Replace the target with the provided value.
+    pub fn set_target(&mut self, target: NodeIndex) {
+        self.target = target;
     }
 }
 
@@ -216,6 +221,10 @@ impl DecisionDNNF {
         &self.nodes
     }
 
+    pub(crate) fn nodes_mut(&mut self) -> &mut NodeVec {
+        &mut self.nodes
+    }
+
     /// Returns the number of nodes of the formula.
     #[must_use]
     pub fn n_nodes(&self) -> usize {
@@ -224,6 +233,10 @@ impl DecisionDNNF {
 
     pub(crate) fn edges(&self) -> &EdgeVec {
         &self.edges
+    }
+
+    pub(crate) fn edges_mut(&mut self) -> &mut EdgeVec {
+        &mut self.edges
     }
 
     /// Returns the number of edges of the formula.
@@ -243,7 +256,7 @@ impl DecisionDNNF {
 macro_rules! index_type {
     ($type_name:ident, $index_name:ident, $vec_index_name:ident) => {
         #[doc = concat!("An index type dedicated to [`", stringify!($type_name), "`] objects.")]
-        #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+        #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
         pub struct $index_name(usize);
 
         impl From<usize> for $index_name {
@@ -268,6 +281,16 @@ macro_rules! index_type {
             #[must_use]
             pub fn as_slice(&self) -> &[$type_name] {
                 &self.0
+            }
+
+            #[must_use]
+            pub(crate) fn as_mut_slice(&mut self) -> &mut [$type_name] {
+                &mut self.0
+            }
+
+            #[must_use]
+            pub(crate) fn as_mut(&mut self) -> &mut Vec<$type_name> {
+                &mut self.0
             }
         }
 

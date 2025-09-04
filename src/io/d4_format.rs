@@ -1,6 +1,7 @@
 use crate::core::{Edge, Node, NodeIndex};
 use crate::{DecisionDNNF, Literal};
 use anyhow::{anyhow, Context, Result};
+use std::io::{BufWriter, Write};
 use std::str::FromStr;
 use std::{
     cell::RefCell,
@@ -155,6 +156,60 @@ impl Reader {
             return Err(anyhow!("missing final 0"));
         }
         reader_data.add_new_edge(source_index, target_index, propagated)
+    }
+}
+
+/// A structure used to write a Decision-DNNF using the [d4](https://github.com/crillab/d4) output format.
+pub struct Writer;
+
+impl Writer {
+    /// Writes a Decision-DNNF using the d4 format.
+    ///
+    /// # Errors
+    ///
+    /// An error is raised if an I/O exception occurs.
+    pub fn write<W>(mut writer: W, ddnnf: &DecisionDNNF) -> Result<()>
+    where
+        W: Write,
+    {
+        let mut bufwriter = BufWriter::new(&mut writer);
+        let mut edge_src = vec![0; ddnnf.n_edges()];
+        for (i, node) in ddnnf.nodes().as_slice().iter().enumerate() {
+            let letter = match node {
+                Node::And(edge_indices) => {
+                    for edge_index in edge_indices {
+                        edge_src[usize::from(*edge_index)] = i;
+                    }
+                    'a'
+                }
+                Node::Or(edge_indices) => {
+                    for edge_index in edge_indices {
+                        edge_src[usize::from(*edge_index)] = i;
+                    }
+                    'o'
+                }
+                Node::True => 't',
+                Node::False => 'f',
+            };
+            let node_index = i + 1;
+            writeln!(bufwriter, "{letter} {node_index} 0")
+                .context("while writing a d-DNNF node")?;
+        }
+        let ctx = "while writing a d-DNNF edge";
+        for (i, edge) in ddnnf.edges().as_slice().iter().enumerate() {
+            write!(
+                bufwriter,
+                "{} {} ",
+                edge_src[i] + 1,
+                usize::from(edge.target()) + 1
+            )
+            .context(ctx)?;
+            for p in edge.propagated() {
+                write!(bufwriter, "{} ", isize::from(*p)).context(ctx)?;
+            }
+            writeln!(bufwriter, "0").context(ctx)?;
+        }
+        Ok(())
     }
 }
 
@@ -417,5 +472,15 @@ mod tests {
     #[test]
     fn test_empty_instance() {
         assert_error("", "formula is empty");
+    }
+
+    #[test]
+    fn test_write() {
+        let instance =
+            "a 1 0\no 2 0\no 3 0\nt 4 0\n1 2 0\n1 3 0\n2 4 -1 0\n2 4 1 0\n3 4 -2 0\n3 4 2 0\n";
+        let ddnnf = read_correct_ddnnf(instance);
+        let mut buf: Vec<u8> = Vec::new();
+        Writer::write(&mut buf, &ddnnf).unwrap();
+        assert_eq!(instance, String::from_utf8(buf).unwrap());
     }
 }

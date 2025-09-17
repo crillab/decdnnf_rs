@@ -1,6 +1,8 @@
 use anyhow::{anyhow, Context, Result};
 use clap::{Arg, ArgMatches};
-use decdnnf_rs::{D4Reader, DecisionDNNF, DecisionDNNFChecker, Literal};
+use decdnnf_rs::{
+    CNFFormula, D4Reader, DecisionDNNF, DecisionDNNFChecker, DimacsCNFReader, Literal,
+};
 use log::{info, warn};
 use std::{
     fs::{self, File},
@@ -10,6 +12,7 @@ use std::{
 };
 
 const ARG_INPUT: &str = "ARG_INPUT";
+const ARG_INPUT_CNF: &str = "ARG_INPUT_CNF";
 const ARG_N_VARS: &str = "ARG_N_VARS";
 const ARG_DO_NOT_CHECK_DDNNF: &str = "ARG_DO_NOT_CHECK_DDNNF";
 
@@ -34,6 +37,16 @@ pub(crate) fn args_input<'a>() -> Vec<Arg<'a, 'a>> {
             .takes_value(false)
             .help("do not check the correctness of the input Decision-DNNF"),
     ]
+}
+
+pub(crate) fn arg_input_cnf<'a>() -> Arg<'a, 'a> {
+    Arg::with_name(ARG_INPUT_CNF)
+        .short("c")
+        .long("cnf")
+        .required(true)
+        .empty_values(false)
+        .multiple(false)
+        .help("the equivalent CNF formula")
 }
 
 pub(crate) fn read_input_ddnnf(arg_matches: &ArgMatches<'_>) -> Result<DecisionDNNF> {
@@ -73,6 +86,20 @@ pub(crate) fn read_input_ddnnf_step(arg_matches: &ArgMatches<'_>) -> Result<Deci
     info!("number of nodes: {}", ddnnf.n_nodes());
     info!("number of edges: {}", ddnnf.n_edges());
     Ok(ddnnf)
+}
+
+pub(crate) fn read_input_cnf(arg_matches: &ArgMatches<'_>) -> Result<CNFFormula> {
+    log_time_for_step("CNF reading", || read_input_cnf_step(arg_matches))
+}
+
+pub(crate) fn read_input_cnf_step(arg_matches: &ArgMatches<'_>) -> Result<CNFFormula> {
+    let input_file_canonicalized = realpath_from_arg(arg_matches, ARG_INPUT_CNF)?;
+    info!("reading input file {:?}", input_file_canonicalized);
+    let file_reader = BufReader::new(File::open(input_file_canonicalized)?);
+    let cnf = DimacsCNFReader::read(file_reader).context("while parsing the input CNF")?;
+    info!("number of variables: {}", cnf.n_vars());
+    info!("number of clauses: {}", cnf.n_clauses());
+    Ok(cnf)
 }
 
 fn realpath_from_arg(arg_matches: &ArgMatches<'_>, arg: &str) -> Result<PathBuf> {

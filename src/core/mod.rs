@@ -1,3 +1,6 @@
+mod cnf;
+pub use cnf::CNFFormula;
+
 mod decision_dnnf;
 pub use decision_dnnf::DecisionDNNF;
 pub use decision_dnnf::Edge;

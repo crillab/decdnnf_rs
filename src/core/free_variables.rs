@@ -17,9 +17,11 @@ use crate::{
 ///
 /// The literals encoding the free variables are always the negative ones.
 #[derive(Debug)]
+#[allow(clippy::struct_field_names)]
 pub struct FreeVariables {
     root_free_vars: Vec<Literal>,
     or_free_vars: OrFreeVariables,
+    involved_vars: Vec<Option<InvolvedVars>>,
 }
 
 impl FreeVariables {
@@ -42,6 +44,7 @@ impl FreeVariables {
         Self {
             root_free_vars,
             or_free_vars: OrFreeVariables::build(or_free_vars),
+            involved_vars,
         }
     }
 
@@ -59,6 +62,11 @@ impl FreeVariables {
     #[must_use]
     pub fn or_free_vars(&self) -> &OrFreeVariables {
         &self.or_free_vars
+    }
+
+    #[must_use]
+    pub(crate) fn involved_vars(&self, n: NodeIndex) -> &InvolvedVars {
+        self.involved_vars[usize::from(n)].as_ref().unwrap()
     }
 }
 

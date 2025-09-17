@@ -3,6 +3,7 @@
 mod algorithms;
 pub use algorithms::DecisionDNNFChecker;
 pub use algorithms::DirectAccessEngine;
+pub use algorithms::EquivalentNodesMerging;
 pub use algorithms::ModelCounter;
 pub use algorithms::ModelEnumerator;
 pub use algorithms::ModelFinder;
@@ -10,6 +11,7 @@ pub use algorithms::OrderedDirectAccessEngine;
 pub use algorithms::OrphanFinder;
 
 mod core;
+pub use core::CNFFormula;
 pub use core::DecisionDNNF;
 pub use core::FreeVariables;
 pub use core::Literal;
@@ -19,3 +21,4 @@ mod io;
 pub use io::C2dWriter;
 pub use io::D4Reader;
 pub use io::D4Writer;
+pub use io::DimacsCNFReader;

@@ -206,6 +206,7 @@ impl<'a> EquivalenceSearchData<'a> {
 
     fn is_implied(&self, propagated1: &[Literal], n2: NodeIndex) -> bool {
         let subdnnf = self.model_counter.ddnnf().subformula(n2);
+        let involved_vars = self.model_counter.ddnnf().free_vars().involved_vars(n2);
         let model_finder = ModelFinder::new(&subdnnf);
         let mut propagations = Propagations::new(self.model_counter.ddnnf().n_vars());
         propagations.push_propagated(propagated1);
@@ -213,6 +214,7 @@ impl<'a> EquivalenceSearchData<'a> {
         'for_each_clause: for cl in self.cnf.iter_clauses() {
             assumptions.clear();
             assumptions.extend_from_slice(cl);
+            let mut involved_in_subformula = false;
             let mut i = 0;
             while i < assumptions.len() {
                 match propagations.is_propagated(assumptions[i]) {
@@ -221,12 +223,16 @@ impl<'a> EquivalenceSearchData<'a> {
                         assumptions.swap_remove(i);
                     }
                     None => {
+                        if involved_vars.is_set(assumptions[i]) {
+                            involved_in_subformula = true;
+                        }
                         assumptions[i] = assumptions[i].flip();
                         i += 1;
                     }
                 }
             }
             if !assumptions.is_empty()
+                && involved_in_subformula
                 && model_finder
                     .find_model_under_assumptions(&assumptions)
                     .is_some()
@@ -372,6 +378,42 @@ mod tests {
         let eq_finder = EquivalentNodesMerging::search(&model_counter, &cnf).unwrap();
         assert_eq!(
             vec![(1.into(), 2.into())],
+            eq_finder.equivalences().collect::<Vec<_>>(),
+        );
+    }
+
+    #[test]
+    fn test_equiv_clause_with_single_free_var() {
+        let ddnnf = DecisionDNNF::from_raw_data(
+            3,
+            vec![
+                Node::And(vec![0.into(), 1.into()]),
+                Node::True,
+                Node::Or(vec![2.into(), 3.into()]),
+                Node::And(vec![4.into()]),
+                Node::And(vec![5.into()]),
+            ],
+            vec![
+                Edge::from_raw_data(1.into(), vec![Literal::from(1)]),
+                Edge::from_raw_data(2.into(), vec![]),
+                Edge::from_raw_data(3.into(), vec![Literal::from(-2)]),
+                Edge::from_raw_data(4.into(), vec![Literal::from(2)]),
+                Edge::from_raw_data(1.into(), vec![Literal::from(3)]),
+                Edge::from_raw_data(1.into(), vec![Literal::from(3)]),
+            ],
+        );
+        let cnf = CNFFormula::from_data(
+            3,
+            [1, -2, 3, 2, 3]
+                .iter()
+                .map(|i| Literal::from(*i))
+                .collect::<Vec<_>>(),
+            vec![0, 1, 3],
+        );
+        let model_counter = ModelCounter::new(&ddnnf, false);
+        let eq_finder = EquivalentNodesMerging::search(&model_counter, &cnf).unwrap();
+        assert_eq!(
+            vec![(3.into(), 4.into())],
             eq_finder.equivalences().collect::<Vec<_>>(),
         );
     }

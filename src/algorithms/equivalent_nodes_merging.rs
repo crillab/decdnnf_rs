@@ -1,5 +1,5 @@
 use crate::{
-    core::{Node, NodeIndex},
+    core::{Node, NodeIndex, SubformulaReusableDS},
     CNFFormula, DecisionDNNF, Literal, ModelCounter, ModelFinder,
 };
 use anyhow::{anyhow, Context, Result};
@@ -66,8 +66,9 @@ impl EquivalentNodesMerging {
     /// If you are ensure this property holds, you can remove such equivalences thanks to the [`EquivalentNodesMerging::merge_equivalent_ancestors`] function.
     pub fn search(model_counter: &ModelCounter, cnf: &CNFFormula) -> Result<Self> {
         let mut eq_search_data = EquivalenceSearchData::new(model_counter, cnf);
+        let mut subformula_reusable_ds = SubformulaReusableDS::new();
         eq_search_data
-            .search_from(0.into())
+            .search_from(0.into(), &mut subformula_reusable_ds)
             .context("while searching equivalent nodes")?;
         Ok(Self::from(eq_search_data))
     }
@@ -139,7 +140,7 @@ impl<'a> EquivalenceSearchData<'a> {
             .truncate(self.propagated_literals.len() - n);
     }
 
-    fn search_from(&mut self, node_index: NodeIndex) -> Result<()> {
+    fn search_from(&mut self, node_index: NodeIndex, ds: &mut SubformulaReusableDS) -> Result<()> {
         if self.node_seen[usize::from(node_index)] {
             return Ok(());
         }
@@ -166,6 +167,7 @@ impl<'a> EquivalenceSearchData<'a> {
                             &self.propagated_literals,
                             *candidate,
                             candidate_propagated,
+                            ds,
                         ) {
                             self.equivalences[usize::from(node_index)] = Some(*candidate);
                             self.has_equivalence.push(node_index);
@@ -185,7 +187,7 @@ impl<'a> EquivalenceSearchData<'a> {
                 for edge_index in children_indices {
                     let edge = &ddnnf.edges()[*edge_index];
                     self.push_propagated(edge.propagated());
-                    self.search_from(edge.target())?;
+                    self.search_from(edge.target(), ds)?;
                     self.pop_propagated(edge.propagated().len());
                 }
             }
@@ -200,12 +202,21 @@ impl<'a> EquivalenceSearchData<'a> {
         propagated1: &[Literal],
         n2: NodeIndex,
         propagated2: &[Literal],
+        ds: &mut SubformulaReusableDS,
     ) -> bool {
-        self.is_implied(propagated1, n2) && self.is_implied(propagated2, n1)
+        self.is_implied(propagated1, n2, ds) && self.is_implied(propagated2, n1, ds)
     }
 
-    fn is_implied(&self, propagated1: &[Literal], n2: NodeIndex) -> bool {
-        let subdnnf = self.model_counter.ddnnf().subformula(n2);
+    fn is_implied(
+        &self,
+        propagated1: &[Literal],
+        n2: NodeIndex,
+        ds: &mut SubformulaReusableDS,
+    ) -> bool {
+        let subdnnf = self
+            .model_counter
+            .ddnnf()
+            .subformula_with_internal_ds(n2, ds);
         let involved_vars = self.model_counter.ddnnf().free_vars().involved_vars(n2);
         let model_finder = ModelFinder::new(&subdnnf);
         let mut propagations = Propagations::new(self.model_counter.ddnnf().n_vars());

@@ -36,6 +36,46 @@ pub(crate) fn args_input<'a>() -> Vec<Arg<'a, 'a>> {
     ]
 }
 
+const ARG_ASSUMPTIONS: &str = "ARG_ASSUMPTIONS";
+
+pub(crate) fn arg_assumptions<'a>() -> Arg<'a, 'a> {
+    Arg::with_name(ARG_ASSUMPTIONS)
+        .short("a")
+        .long("assumptions")
+        .empty_values(false)
+        .multiple(false)
+        .allow_hyphen_values(true)
+        .help("sets some assumptions as a string of blank separated DIMACS literals")
+}
+
+pub(crate) fn read_assumptions(
+    ddnnf: &DecisionDNNF,
+    arg_matches: &ArgMatches<'_>,
+) -> Result<Vec<Literal>> {
+    let ctx = "while parsing assumptions";
+    let assumptions = if let Some(str_assumptions) = arg_matches.value_of(ARG_ASSUMPTIONS) {
+        str_assumptions
+            .split_whitespace()
+            .map(|s| {
+                str::parse::<isize>(s)
+                    .map(Literal::from)
+                    .map_err(|e| anyhow!(e))
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .context(ctx)
+    } else {
+        Ok(vec![])
+    };
+    if let Ok(a) = &assumptions {
+        if a.iter().any(|l| l.var_index() >= ddnnf.n_vars()) {
+            return Err(
+                anyhow!("an assumption refers to a variable that does not exist").context(ctx),
+            );
+        }
+    }
+    assumptions
+}
+
 pub(crate) fn read_input_ddnnf(arg_matches: &ArgMatches<'_>) -> Result<DecisionDNNF> {
     log_time_for_step("Decision-DNNF reading", || {
         read_input_ddnnf_step(arg_matches)

@@ -6,16 +6,18 @@ use rug::Integer;
 
 /// A structure used to enumerate the models of a [`DecisionDNNF`].
 ///
-/// After building an enumerator with the [`new`](Self::new) function, call [`compute_next_model`](Self::compute_next_model) until you get [`None`].
-/// Each call which is not [`None`] returns a model, in which free variables may be eluded (see below).
-/// The algorithm takes a time polynomial in the number of models and a size polynomial in the size of the Decision-DNNF.
+/// After creating an enumerator with the [`new`](Self::new) function, call [`compute_next_model`](Self::compute_next_model) until you receive [`None`].
+/// Each call that is not [`None`] returns a model, in which free variables may be eluded (see below).
+/// The algorithm takes time that is polynomial in the number of models and space that is polynomial in the size of the Decision-DNNF.
 ///
-/// When creating the enumerator, you must indicate if you want to elude the free variables.
-/// If you choose not to elude the free variables, then the algorithm will process a traditional enumeration:
-/// the models returned by [`compute_next_model`](Self::compute_next_model) will contain exactly one literal by variable (i.e. no literal will be [`None`]).
-/// If you choose to elude free variables, then they will be absent from models (replaced by [`None`]).
-/// In this case, the algorithm won't produce one model by literal polarity, but this single model where the variable is absent.
-/// Eluding free variables results in shorter enumerations, since each partial model that is returned represents a number of models equals to 2 at the power of the number of eluded variables.
+/// When creating the enumerator, indicate whether you want to elude the free variables.
+/// If you choose not to elude the free variables, the algorithm will perform a traditional enumeration.
+/// The models returned by [`compute_next_model`](Self::compute_next_model) will contain exactly one literal by variable (i.e. no literal will be [`None`]).
+///
+/// If you choose to elude the free variables, then they will be absent from the models (replaced by [`None`]).
+/// In this case, the algorithm won't produce one model for each literal polarity, but rather one model in which the variable is absent.
+/// Eluding free variables results in shorter enumerations since each partial model represents a number of models equal to two to the power of the number of eluded variables.
+/// For more information on this kind of enumeration, see the research paper *[Leveraging Decision-DNNF Compilation for Enumerating Disjoint Partial Models](https://doi.org/10.24963/kr.2024/48))*.
 ///
 /// # Examples
 ///
@@ -93,8 +95,8 @@ pub struct ModelEnumerator<'a> {
 impl<'a> ModelEnumerator<'a> {
     /// Builds a new model enumerator for a [`DecisionDNNF`].
     ///
-    /// The second parameter sets whether free variables should be eluded from models.
-    /// See top-level [`ModelEnumerator`] documentation for more information about free variables elusion.
+    /// The second parameter specifies whether free variables should be excluded from models.
+    /// See the top-level [`ModelEnumerator`] documentation for more information about free variable elusion.
     #[must_use]
     #[allow(clippy::missing_panics_doc)]
     pub fn new(ddnnf: &'a DecisionDNNF, elude_free_vars: bool) -> Self {
@@ -120,13 +122,13 @@ impl<'a> ModelEnumerator<'a> {
         }
     }
 
-    /// Loads the model which id is given thanks to a [`DirectAccessEngine`].
+    /// Loads the model which the given id thanks to a [`DirectAccessEngine`].
     ///
-    /// This enumerator is set in the state in which it would have been if it enumerated the models from the first to the one with the given id.
+    /// This enumerator is set to the state it would be if it enumerated the models from the first to the one with the given id.
     ///
     /// # Panics
     ///
-    /// This function panics if the [`DirectAccessEngine`] does not refer to the same [`DecisionDNNF`] than this object.
+    /// This function panics if the [`DirectAccessEngine`] does not refer to the same [`DecisionDNNF`] as this object.
     pub fn jump_to(
         &mut self,
         direct_access_engine: &DirectAccessEngine,

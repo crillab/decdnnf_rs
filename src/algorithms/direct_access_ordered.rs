@@ -3,11 +3,11 @@ use crate::{DecisionDNNF, Literal};
 use anyhow::{anyhow, Result};
 use rug::Integer;
 
-/// An object that, given an (internally computed) complete order on the models of a [`DecisionDNNF`], allows to return the k-th model.
+/// An object that, given a complete order on the models of a [`DecisionDNNF`] computed internally, allows the k-th model to be returned.
 ///
 /// This is the ordered counterpart of [`DirectAccessEngine`](crate::DirectAccessEngine).
-/// The order of the models is given at the time the object is created as a list of literals.
-/// The order of the models will be the same for two equivalent formulas, even if they have a different structure.
+/// The order of the models is determined when the object is created and is represented as a list of literals.
+/// The order of the models will be the same for two equivalent formulas, even if their structures differ.
 pub struct OrderedDirectAccessEngine<'a> {
     ddnnf: &'a DecisionDNNF,
     global_n_models: Integer,
@@ -15,9 +15,9 @@ pub struct OrderedDirectAccessEngine<'a> {
 }
 
 impl<'a> OrderedDirectAccessEngine<'a> {
-    /// Builds a new [`DirectAccessOrderedEngine`] given a [`DecisionDNNF`] and an order.
+    /// Builds a new [`OrderedDirectAccessEngine`] given a [`DecisionDNNF`] and an order.
     ///
-    /// The order must contain exactly one literal of each variable in the problem, including those that are defined but not present in the formula.
+    /// The order must include exactly one instance of each variable from the problem, even those defined but not present in the formula.
     ///
     /// # Errors
     ///
@@ -64,7 +64,7 @@ impl<'a> OrderedDirectAccessEngine<'a> {
         Some(model)
     }
 
-    /// Returns the underlying ddnnf.
+    /// Returns the underlying formula.
     #[must_use]
     pub fn ddnnf(&self) -> &DecisionDNNF {
         self.ddnnf

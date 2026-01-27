@@ -9,7 +9,7 @@ use std::{
 
 /// A structure representing a literal.
 ///
-/// Internal, a literal has a variable index and a polarity.
+/// Internally, a literal has a variable index and a polarity.
 /// The variable indices begin at 0.
 ///
 /// Such literals can be built from DIMACS representations using the [`From`] trait for isize.
@@ -40,13 +40,13 @@ impl Literal {
 
     /// Returns the polarity of the literal.
     ///
-    /// This function returns `true` for the positive literal and `false` for the negative one.
+    /// This function returns `true` for a positive literal and `false` for a negative one.
     #[must_use]
     pub fn polarity(&self) -> bool {
         self.0 & 1 == 0
     }
 
-    /// Returns the literal with the same variable index but the opposite polarity.
+    /// Returns the literal with the same variable index, but opposite polarity.
     #[must_use]
     pub fn flip(&self) -> Literal {
         Literal(self.0 ^ 1)
@@ -54,7 +54,7 @@ impl Literal {
 
     /// Sets the current literal polarity to false.
     ///
-    /// This has no effect if the literal has already a false polarity.
+    /// This has no effect if the literal already has a false polarity.
     pub fn set_negative(&mut self) {
         self.0 |= 1;
     }
@@ -98,12 +98,13 @@ impl Debug for Literal {
 
 /// A Decision-DNNF node.
 ///
-/// Note that there aren't literal nodes: they are encoded as arcs targeting true nodes and propagated literals.
+/// Note that there are no literal nodes; rather, they are encoded as arcs that target true nodes and propagate literals.
+/// See [`DecisionDNNF`] for more information on the internal representation of such formulas.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Node {
-    /// A conjunction node, associated with the edges to its children.
+    /// A conjunction node, associated with edges targeting its children.
     And(Vec<EdgeIndex>),
-    /// A disjunction node, associated with the edges to its children.
+    /// A disjunction node, associated with edges targeting its children.
     Or(Vec<EdgeIndex>),
     /// A true node.
     True,
@@ -136,6 +137,7 @@ impl FromStr for Node {
 }
 
 /// An edge targets a node and propagates literals, in the spirit of recent [d4](https://github.com/crillab/d4) versions.
+/// See [`DecisionDNNF`] for more information on the internal representation of such formulas.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Edge {
     target: NodeIndex,
@@ -173,6 +175,10 @@ impl Edge {
 /// [On the Use of Partially Ordered Decision Graphs in Knowledge Compilation and Quantified Boolean Formulae.](http://www.cril.univ-artois.fr/~marquis/fargier-marquis-aaai06.pdf) AAAI 2006: 42-47
 ///
 /// Decision-DNNFs are built by readers; see e.g. [`D4Reader`](crate::D4Reader).
+/// Internally, they are represented by a vector of [`Node`] and a vector of [`Edge`]`.
+/// The first node of the vector is the root of the formula. The indices of the edges starting from conjunction and disjunction nodes are contained within those nodes.
+/// Edges contain the index of the target node and the literals that are propagated by following them.
+/// See the [d4](https://github.com/crillab/d4) repository for more information on the propagated literals.
 #[derive(Debug)]
 pub struct DecisionDNNF {
     n_vars: usize,
@@ -193,8 +199,8 @@ impl DecisionDNNF {
 
     /// Creates a new (sub)formula from an existing one.
     ///
-    /// The new one is rooted by the node of the initial formula which index is given by the parameter `root`.
-    /// The number of variables considered in the subformula is the same than the one of the initial formula.
+    /// The new formula is rooted by the node of the initial formula, the index of which is given by the parameter `root``.
+    /// The number of variables considered in the subformula is the same as in the initial formula.
     #[must_use]
     pub fn subformula(&self, root: NodeIndex) -> Self {
         SubformulaBuilder::build_from_new_root(self, root).into()
@@ -202,14 +208,14 @@ impl DecisionDNNF {
 
     /// Updates the number of variables.
     ///
-    /// The new number must be higher than the current number of variables.
-    /// This function is useful when you load a Decision DNNF in which the last variables are free; in this case, the formula itself is not sufficient to deduce the real number of variables.
-    /// For example, when considering the trivial, true, Decision-DNNF, the formula resumes to the `true` constant  whatever the number of variables.
-    /// Calling this function indicates real number of variables this formula relies on.
+    /// The new number must be greater than the current number of variables.
+    /// This function is useful when loading a Decision-DNNF in which the last variables are free. In this case, the formula itself is insufficient to deduce the actual number of variables.
+    /// For example, the formula for the trivial, true Decision-DNNF reduces to the constant true, regardless of the number of variables.
+    /// Calling this function indicates the real number of variables that the formula relies on.
     ///
     /// # Panics
     ///
-    /// This function panics if the new number of variables is lower than the current.
+    /// This function panics if the new number of variables is lower than the current number.
     pub fn update_n_vars(&mut self, n_vars: usize) {
         assert!(
             n_vars >= self.n_vars,
@@ -218,15 +224,16 @@ impl DecisionDNNF {
         self.n_vars = n_vars;
     }
 
-    /// Returns the number of variables involved in this Decision-DNNF.
+    /// Returns the number of variables involved in the Decision-DNNF.
     ///
-    /// In case the number of variables was updated by a call to [`update_n_vars`](Self::update_n_vars), then the updated value is returned.
+    /// If the number of variables is updated by calling [`update_n_vars`](Self::update_n_vars), then the updated value is returned.
     #[must_use]
     pub fn n_vars(&self) -> usize {
         self.n_vars
     }
 
-    pub(crate) fn nodes(&self) -> &NodeVec {
+    /// Returns the vector of nodes of the Decision-DNNF.
+    pub fn nodes(&self) -> &NodeVec {
         &self.nodes
     }
 
@@ -234,13 +241,14 @@ impl DecisionDNNF {
         &mut self.nodes
     }
 
-    /// Returns the number of nodes of the formula.
+    /// Returns the number of nodes in the formula.
     #[must_use]
     pub fn n_nodes(&self) -> usize {
         self.nodes.as_slice().len()
     }
 
-    pub(crate) fn edges(&self) -> &EdgeVec {
+    /// Returns the vector of edges of the Decision-DNNF.
+    pub fn edges(&self) -> &EdgeVec {
         &self.edges
     }
 
@@ -248,7 +256,7 @@ impl DecisionDNNF {
         &mut self.edges
     }
 
-    /// Returns the number of edges of the formula.
+    /// Returns the number of edges in the formula.
     #[must_use]
     pub fn n_edges(&self) -> usize {
         self.edges.as_slice().len()

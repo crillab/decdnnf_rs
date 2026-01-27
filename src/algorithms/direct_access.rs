@@ -4,19 +4,19 @@ use crate::{
 };
 use rug::Integer;
 
-/// An object that, given an (internally computed) complete order on the models of a [`DecisionDNNF`], allows to return the k-th model.
+/// An object that, given a complete order on the models of a [`DecisionDNNF`] computed internally, allows the k-th model to be returned.
 ///
-/// The order of the models is given by the structure of the formula.
-/// This implies that given the same formula the order will remain the same at each call,
-/// but it will change when considering an equivalent formula which has a different structure.
+/// The order of the models is determined by the structure of the formula.
+/// This implies that, given the same formula, the order will remain the same with each call.
+/// However, it will change when considering an equivalent formula with a different structure.
 pub struct DirectAccessEngine<'a> {
     model_counter: &'a ModelCounter<'a>,
 }
 
 impl<'a> DirectAccessEngine<'a> {
-    /// Builds a new [`DirectAccessEngine`] given a [`ModelCounter`].
+    /// Creates a new [`DirectAccessEngine`] given a [`ModelCounter`].
     ///
-    /// The formula under consideration is the one of the model counter.
+    /// The formula under consideration is that of the model counter.
     #[must_use]
     pub fn new(model_counter: &'a ModelCounter<'a>) -> Self {
         Self { model_counter }
@@ -30,7 +30,7 @@ impl DirectAccessEngine<'_> {
         self.model_counter.global_count()
     }
 
-    /// Returns the model at the given index.
+    /// Returns the model at the specified index.
     #[must_use]
     pub fn model(&self, mut n: Integer) -> Option<Vec<Option<Literal>>> {
         if n >= *self.model_counter.global_count() {
@@ -47,9 +47,12 @@ impl DirectAccessEngine<'_> {
         Some(model)
     }
 
-    /// Returns the model at the given index, along its model graph.
+    /// Returns the model at the given index, along with its model graph.
     ///
-    /// If the index is higher than the number of models, [`None`] is returned.
+    /// If the index is greater than the number of models, [`None`] is returned.
+    ///
+    /// The model graph is a vector that maps the nodes to their selected child.
+    /// For nodes that are not disjunctions, the selected child is always zero.
     #[must_use]
     pub fn model_with_graph(&self, mut n: Integer) -> Option<(Vec<Option<Literal>>, Vec<usize>)> {
         if n >= *self.model_counter.global_count() {
@@ -133,7 +136,7 @@ impl DirectAccessEngine<'_> {
         }
     }
 
-    /// Returns the underlying ddnnf.
+    /// Returns the underlying [`DecisionDNNF`].
     #[must_use]
     pub fn ddnnf(&self) -> &DecisionDNNF {
         self.model_counter.ddnnf()

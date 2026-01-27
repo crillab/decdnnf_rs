@@ -7,15 +7,15 @@ use rustc_hash::FxHashMap;
 use std::io::BufWriter;
 pub use std::io::Write;
 
-/// A structure used to write a Decision-DNNF using the [c2d](http://reasoning.cs.ucla.edu/c2d/) output format.
+/// A structure used to write a Decision-DNNF in the [c2d](http://reasoning.cs.ucla.edu/c2d/) output format.
 pub struct Writer;
 
 impl Writer {
-    /// Writes a Decision-DNNF using the c2d format.
+    /// Writes a Decision-DNNF in the c2d format.
     ///
     /// # Errors
     ///
-    /// An error is raised if an I/O exception occurs.
+    /// An error is raised when an I/O exception occurs.
     pub fn write<W>(mut writer: W, ddnnf: &DecisionDNNF) -> Result<()>
     where
         W: Write,

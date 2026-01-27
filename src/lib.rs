@@ -11,8 +11,12 @@ pub use algorithms::OrphanFinder;
 
 mod core;
 pub use core::DecisionDNNF;
+pub use core::Edge;
+pub use core::EdgeIndex;
 pub use core::FreeVariables;
 pub use core::Literal;
+pub use core::Node;
+pub use core::NodeIndex;
 pub use core::OrFreeVariables;
 
 mod io;

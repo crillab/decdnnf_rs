@@ -15,12 +15,12 @@ use std::{
 /// The output format of d4 is an extension of the initial format output by c2d.
 /// The description of the format is available on the [d4](https://github.com/crillab/d4) repository.
 ///
-/// By default, this reader performs syntactic checks (i.e. the input data follows the format).
-/// It also checks that the described formula has a single root and no cycles.
-/// This behavior can be changed by calling [`do_not_check`](Self::set_do_not_check) before [`read`](Self::read).
+/// By default, the reader performs syntactic checks to ensure that the input data follows the format.
+/// It also verifies that the specified formula contains no orphan nodes or cycles.
+/// This behavior can be changed by calling [`set_do_not_check`](Self::set_do_not_check) before [`read`](Self::read).
 ///
-/// The index of the root must be 1. The root must be the first node that is described.
-/// The decomposability of the conjunction nodes and the determinism of the disjunction nodes are not check by this reader.
+/// The index of the root must be 1. The root must be the first described node.
+/// The decomposability of the conjunction nodes and the determinism of the disjunction nodes are not checked by this reader.
 /// See [`DecisionDNNFChecker`](crate::DecisionDNNFChecker) if you need to assert these properties.
 #[derive(Default)]
 pub struct Reader {
@@ -37,7 +37,7 @@ impl Reader {
     ///
     /// # Errors
     ///
-    /// An error is returned if the content of the instance does not follow the d4 format or one of the assumptions described above is not true.
+    /// An error will be returned if the instance's content does not follow the d4 format, or if one of the above assumptions is not true.
     ///
     /// # Example
     ///
@@ -164,15 +164,15 @@ impl Reader {
     }
 }
 
-/// A structure used to write a Decision-DNNF using the [d4](https://github.com/crillab/d4) output format.
+/// A structure used for writing a decision-DNNF using the [d4](https://github.com/crillab/d4) output format.
 pub struct Writer;
 
 impl Writer {
-    /// Writes a Decision-DNNF using the d4 format.
+    /// Writes a Decision-DNNF in the d4 format.
     ///
     /// # Errors
     ///
-    /// An error is raised if an I/O exception occurs.
+    /// An error is raised when an I/O exception occurs.
     pub fn write<W>(mut writer: W, ddnnf: &DecisionDNNF) -> Result<()>
     where
         W: Write,

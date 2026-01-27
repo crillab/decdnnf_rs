@@ -9,7 +9,7 @@ static INTEGER_ZERO: Integer = Integer::ZERO;
 
 /// A structure used to count the models of a [`DecisionDNNF`].
 ///
-/// The algorithm takes a time polynomial in the size of the Decision-DNNF.
+/// The algorithm runs in time polynomial in the size of the Decision-DNNF.
 ///
 /// # Example
 ///
@@ -32,7 +32,10 @@ pub struct ModelCounter<'a> {
 impl<'a> ModelCounter<'a> {
     /// Builds a new model counter given a formula.
     ///
-    /// This function can both count the number of full or partial models.
+    /// This function can both count the number of full models (the number of interpretations that satisfy the formula)
+    /// or partial models (the number of model graphs; see the research paper *[Leveraging Decision-DNNF Compilation for Enumerating Disjoint Partial Models](https://doi.org/10.24963/kr.2024/48))*.
+    ///
+    /// Creating a [`ModelCounter`] does not count the models. They are counted when needed.
     #[must_use]
     pub fn new(ddnnf: &'a DecisionDNNF, partial_models: bool) -> Self {
         Self {
@@ -45,12 +48,14 @@ impl<'a> ModelCounter<'a> {
 
     /// Set assumption literals, reducing the number of models.
     ///
-    /// The only models to be considered are the ones that contain all the literals marked as assumptions.
-    /// The set of assumptions must involved at most once each variable.
+    /// The only models to be considered are those that contain all the literals marked as assumptions.
+    /// The set of assumptions must involve each variable at most once.
+    ///
+    /// If the number of models was counted before calling this method, it is cleared.
     ///
     /// # Panics
     ///
-    /// This function panics if the set of assumptions involves the same variable multiple times.
+    /// This function panics if the set of assumptions includes the same variable more than once.
     pub fn set_assumptions(&mut self, assumptions: &[Literal]) {
         let mut assumps = vec![None; self.ddnnf.n_vars()];
         for a in assumptions {
@@ -133,24 +138,24 @@ impl<'a> ModelCounter<'a> {
         }
     }
 
-    /// Returns the number of counted elements of the whole formula.
+    /// Returns the number of elements counted in the entire formula.
     #[must_use]
     #[allow(clippy::missing_panics_doc)]
     pub fn global_count(&self) -> &Integer {
         self.get_or_compute_n_models()[0].as_ref().unwrap()
     }
 
-    /// Returns the [`DecisionDNNF`] which elements are counted.
+    /// Returns the underlying the [`DecisionDNNF`].
     #[must_use]
     pub fn ddnnf(&self) -> &DecisionDNNF {
         self.ddnnf
     }
 
-    /// Returns the number of counted elements of the subfomula rooted at the node which index is given.
+    /// Returns the number of elements counted in the subformula rooted at the given node index.
     ///
     /// # Panics
     ///
-    /// This function panics if the provided node index is greater or equal to the number of nodes of the formula.
+    /// This function panics if the provided node index is greater than or equal to the number of nodes in the formula.
     #[must_use]
     pub fn count_from(&self, index: NodeIndex) -> &Integer {
         self.get_or_compute_n_models()[usize::from(index)]
@@ -158,7 +163,7 @@ impl<'a> ModelCounter<'a> {
             .unwrap()
     }
 
-    /// Returns a Boolean value indicating if partial models are computed (`false` is returns in case full models are computed).
+    /// Returns a Boolean value indicating whether partial models are computed (`false` is returns in case full models are computed).
     #[must_use]
     pub fn partial_models(&self) -> bool {
         self.partial_models

@@ -5,8 +5,8 @@ use crate::{
 
 /// A structure used to find models in a [`DecisionDNNF`].
 ///
-/// Queries can involved assumption literals; in this case, the only models under consideration are the ones that involve such literals.
-/// In case models exists but none include those assumptions, then the query will return that no model exist.
+/// Queries can involve assumption literals. In this case, the only models under consideration are those that include such literals.
+/// If no models include those assumptions, the query will return that no models exist.
 ///
 /// # Example
 ///
@@ -49,11 +49,11 @@ impl<'a> ModelFinder<'a> {
         self.find_model_under_assumptions(&[])
     }
 
-    /// Search for a model compatible with the provided assumptions.
+    /// Search for a model that is compatible with the provided assumptions.
     ///
     /// # Panics
     ///
-    /// The literals must refer to existing variables.
+    /// Literals must refer to existing variables.
     /// In case the variable index of a literal is higher than the highest variable index in the formula, this function panics.
     #[must_use]
     pub fn find_model_under_assumptions(&self, assumptions: &[Literal]) -> Option<Vec<Literal>> {

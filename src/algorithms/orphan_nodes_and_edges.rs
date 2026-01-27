@@ -4,7 +4,7 @@ use crate::{
 };
 use anyhow::{anyhow, Result};
 
-/// A structure used to detect and remove orphan nodes and edges, i.e. nodes and edges which have no ancestor albeit they are not the root of the [`DecisionDNNF`].
+/// A structure that detects and removes orphan nodes and edges — that is, nodes and edges that have no ancestor, despite not being the root of the [`DecisionDNNF`].
 pub struct OrphanFinder {
     orphan_nodes: Vec<NodeIndex>,
     orphan_edges: Vec<EdgeIndex>,
@@ -84,19 +84,19 @@ impl OrphanFinder {
         Ok(())
     }
 
-    /// Returns a slice to the indices of the orphan nodes.
+    /// Returns a slice of the indices of the orphan nodes.
     #[must_use]
     pub fn orphans_nodes(&self) -> &[NodeIndex] {
         &self.orphan_nodes
     }
 
-    /// Returns a slice to the indices of the orphan nodes.
+    /// Returns a slice of the indices of the orphan edges.
     #[must_use]
     pub fn orphans_edges(&self) -> &[EdgeIndex] {
         &self.orphan_edges
     }
 
-    /// Replaces the equivalences in the formula.
+    /// Remove the orphan nodes and edges from the formula.
     pub fn remove_from_formula(&self, ddnnf: &mut DecisionDNNF) {
         if self.orphan_nodes.is_empty() && self.orphan_edges.is_empty() {
             return;

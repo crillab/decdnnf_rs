@@ -3,19 +3,13 @@ use crate::{
     DecisionDNNF, Literal,
 };
 
-/// A structure used to computes the free variables, ie. the variables that does not appear in (some) models.
+/// A structure used to computes the free variables, i.e. the variables that does not appear in some models.
 ///
-/// Free variables can appear in two cases: when they do not appear at all in the formula (what we call *root free variables*),
-/// or when they appear in some child of a disjunction node but not all the children (what we call *OR free variables*).
-/// This function computes both kinds of free variables, and returns a tuple containing first the OR free variables and then the root free variables.
+/// Free variables can appear in two cases: when they do not appear at all in the formula, which we call *root free variables*,
+/// or when they appear in some, but not all, children of a disjunction node, which we call *OR free variables*.
+/// This function computes both kinds of free variables.
 ///
-/// The OR free variables are returned as a vector acting as a mapping from node indices to a structure (`Vec<Vec<Literal>>`) depicting the free variables when selecting a child of this node.
-/// If the index belongs to a node that is not a disjunction, the structure is an empty vector.
-/// In case the node is a disjunction, this vector is a mapping from the children indices to the variables that are free when this child is selected to form a model.
-///
-/// The root free variables are simply returned as a vector of literal.
-///
-/// The literals encoding the free variables are always the negative ones.
+/// Variables are encoded as literals, the polarity of which must be ignored.
 #[derive(Debug)]
 pub struct FreeVariables {
     root_free_vars: Vec<Literal>,
@@ -46,8 +40,6 @@ impl FreeVariables {
     }
 
     /// Returns the root free variables.
-    ///
-    /// See the structure documentation for more information.
     #[must_use]
     pub fn root_free_vars(&self) -> &[Literal] {
         &self.root_free_vars
@@ -55,7 +47,7 @@ impl FreeVariables {
 
     /// Returns the OR free variables.
     ///
-    /// See the structure documentation for more information.
+    /// See [`OrFreeVariables`] for more information.
     #[must_use]
     pub fn or_free_vars(&self) -> &OrFreeVariables {
         &self.or_free_vars
@@ -117,9 +109,7 @@ fn compute_involved_vars(
     union
 }
 
-/// A structure used to handle efficiently the free variables located at disjunction nodes.
-///
-/// This structures allows to store polarity associated with these variables, since they are stored as literals.
+/// A structure used to efficiently handle the free variables located at disjunction nodes.
 #[derive(Debug, Clone)]
 pub struct OrFreeVariables {
     indices_and_lengths: Vec<Vec<(usize, usize)>>,
@@ -145,22 +135,28 @@ impl OrFreeVariables {
     }
 
     /// Sets the polarity associated with the literals as negative for all the free variables.
-    pub fn set_negative_literals(&mut self) {
+    pub(crate) fn set_negative_literals(&mut self) {
         self.data.iter_mut().for_each(Literal::set_negative);
     }
 
-    /// Given a disjunction node index, iterates over the number of free variables each child has.
+    /// Given a disjunction node index, iterates over the number of free variables that each child has.
     pub fn iter_child_free_vars_lengths(&self, var: usize) -> impl Iterator<Item = usize> + '_ {
         self.indices_and_lengths[var]
             .iter()
             .map(|(_, length)| *length)
     }
 
-    /// Returns a slice of the free variables of a given disjunction node child.
+    /// Returns a slice of the free variables of a given disjunction node's child.
     #[must_use]
     pub fn child_free_vars(&self, var: usize, child_index: usize) -> &[Literal] {
         let (start, length) = self.indices_and_lengths[var][child_index];
         &self.data[start..start + length]
+    }
+
+    /// Iterates mutably over the free variables of a given disjunction node child.
+    pub(crate) fn child_free_vars_mut(&mut self, var: usize, child_index: usize) -> &mut [Literal] {
+        let (start, length) = self.indices_and_lengths[var][child_index];
+        &mut self.data[start..start + length]
     }
 
     /// Iterates over the free variables of the children of a given disjunction.
@@ -168,12 +164,6 @@ impl OrFreeVariables {
         self.indices_and_lengths[var]
             .iter()
             .map(|(start, length)| &self.data[*start..*start + *length])
-    }
-
-    /// Iterates mutably over the free variables of a given disjunction node child.
-    pub fn child_free_vars_mut(&mut self, var: usize, child_index: usize) -> &mut [Literal] {
-        let (start, length) = self.indices_and_lengths[var][child_index];
-        &mut self.data[start..start + length]
     }
 }
 

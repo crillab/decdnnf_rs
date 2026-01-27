@@ -5,14 +5,14 @@ use crate::{
 
 /// An algorithm used for an algorithm that checks if a Decision-DNNF is correct.
 ///
-/// The tests consists in checking the decomposability of the conjunction nodes and the determinism of the disjunction nodes.
-/// When using this checker, a violation of the decomposability property will trigger an error.
-/// However, the checking of the determinism is partial, in the sense a disjunction node that is determinist may not be recognized as is by this checker.
-/// For this reason, potential faults on determinism simply triggers warnings.
-/// Thus, even if the checking process does not returns an error, a check of the list of the warnings emitted during the search should be done.
+/// The tests consist of checking the decomposability of the conjunction nodes and the determinism of the disjunction nodes.
+/// When using this checker, a violation of the decomposability property triggers an error.
+/// However, checking for determinism is only partial. For example, a deterministic disjunction node may not be recognized as such by this checker.
+/// For this reason, potential faults in determinism trigger warnings.
+/// Thus, even if the checking process does not return an error, the list of warnings emitted during the search should be checked.
 ///
 /// The detection of an error stops the checking process.
-/// This is not the case when a warning is raised.
+/// This is not the case when a warning is raised, however.
 ///
 /// # Example
 ///
@@ -41,9 +41,9 @@ pub struct DecisionDNNFChecker {
 }
 
 impl DecisionDNNFChecker {
-    /// Performs the check on the provided Decision-DNNF.
+    /// Performs the checks on the provided Decision-DNNF.
     ///
-    /// Call the [`error`](DecisionDNNFChecker::error) and [`warnings`](DecisionDNNFChecker::warnings) on the returnd object the get the results.
+    /// Call the [`error`](DecisionDNNFChecker::error) and [`warnings`](DecisionDNNFChecker::warnings) methods on the returned object to get the results.
     #[must_use]
     pub fn check(ddnnf: &DecisionDNNF) -> DecisionDNNFChecker {
         let mut result = DecisionDNNFChecker::default();

@@ -175,7 +175,7 @@ impl Edge {
 /// [On the Use of Partially Ordered Decision Graphs in Knowledge Compilation and Quantified Boolean Formulae.](http://www.cril.univ-artois.fr/~marquis/fargier-marquis-aaai06.pdf) AAAI 2006: 42-47
 ///
 /// Decision-DNNFs are built by readers; see e.g. [`D4Reader`](crate::D4Reader).
-/// Internally, they are represented by a vector of [`Node`] and a vector of [`Edge`]`.
+/// Internally, they are represented by a vector of [`Node`] and a vector of [`Edge`].
 /// The first node of the vector is the root of the formula. The indices of the edges starting from conjunction and disjunction nodes are contained within those nodes.
 /// Edges contain the index of the target node and the literals that are propagated by following them.
 /// See the [d4](https://github.com/crillab/d4) repository for more information on the propagated literals.
@@ -199,7 +199,7 @@ impl DecisionDNNF {
 
     /// Creates a new (sub)formula from an existing one.
     ///
-    /// The new formula is rooted by the node of the initial formula, the index of which is given by the parameter `root``.
+    /// The new formula is rooted by the node of the initial formula, the index of which is given by the parameter `root`.
     /// The number of variables considered in the subformula is the same as in the initial formula.
     #[must_use]
     pub fn subformula(&self, root: NodeIndex) -> Self {

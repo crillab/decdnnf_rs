@@ -1,6 +1,7 @@
 use super::{cli_manager, common};
 use clap::{App, AppSettings, ArgMatches, SubCommand};
 use decdnnf_rs::ModelCounter;
+use std::rc::Rc;
 
 #[derive(Default)]
 pub struct Command;
@@ -25,8 +26,8 @@ impl<'a> super::command::Command<'a> for Command {
         let ddnnf = common::read_input_ddnnf(arg_matches)?;
         let assumptions = common::read_assumptions(&ddnnf, arg_matches)?;
         let mut model_counter = ModelCounter::new(&ddnnf, false);
-        if !assumptions.is_empty() {
-            model_counter.set_assumptions(&assumptions);
+        if let Some(a) = assumptions {
+            model_counter.set_assumptions(Rc::new(a));
         }
         println!("{}", model_counter.global_count());
         Ok(())

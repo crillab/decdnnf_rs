@@ -1,8 +1,9 @@
 use crate::{
     core::{EdgeIndex, Node, NodeIndex},
-    DecisionDNNF, DirectAccessEngine, Literal, OrFreeVariables,
+    Assumptions, DecisionDNNF, DirectAccessEngine, Literal, OrFreeVariables,
 };
 use rug::Integer;
+use std::rc::Rc;
 
 /// A structure used to enumerate the models of a [`DecisionDNNF`].
 ///
@@ -90,6 +91,7 @@ pub struct ModelEnumerator<'a> {
     model: Vec<Option<Literal>>,
     has_model: bool,
     elude_free_vars: bool,
+    assumptions: Option<Rc<Assumptions>>,
 }
 
 impl<'a> ModelEnumerator<'a> {
@@ -105,11 +107,12 @@ impl<'a> ModelEnumerator<'a> {
         let root_free_vars_assignment = free_vars.root_free_vars().to_vec();
         let or_free_vars_assignments = free_vars.or_free_vars().clone();
         let mut model = vec![None; ddnnf.n_vars()];
-        Self::update_model_with_propagations(
+        assert!(Self::update_model_with_propagations(
             &mut model,
             &root_free_vars_assignment,
             elude_free_vars,
-        );
+            None,
+        ));
         Self {
             ddnnf,
             or_edge_indices: vec![0; n_nodes],
@@ -119,7 +122,71 @@ impl<'a> ModelEnumerator<'a> {
             model,
             has_model: true,
             elude_free_vars,
+            assumptions: None,
         }
+    }
+
+    /// Set assumption literals, reducing the number of models.
+    ///
+    /// The only models to be considered are those that contain all the literals marked as assumptions.
+    /// The set of assumptions must involve each variable at most once.
+    ///
+    /// The enumeration process is [`reset`](Self::reset) by a call to this method.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if the set of assumptions includes the same variable more than once.
+    pub fn set_assumptions(&mut self, assumptions: Rc<Assumptions>) {
+        let n_nodes = self.ddnnf.nodes().as_slice().len();
+        self.or_edge_indices = vec![0; n_nodes];
+        self.first_computed = false;
+        self.model = vec![None; self.ddnnf.n_vars()];
+        self.has_model = true;
+        for a in assumptions.as_slice() {
+            self.model[a.var_index()] = Some(*a);
+        }
+        let (root_free_vars, or_free_vars) = self
+            .ddnnf
+            .free_vars()
+            .apply_assumptions(&assumptions)
+            .take();
+        self.assumptions = Some(assumptions);
+        self.root_free_vars_assignment = root_free_vars;
+        self.or_free_vars_assignments = or_free_vars;
+        assert!(Self::update_model_with_propagations(
+            &mut self.model,
+            &self.root_free_vars_assignment,
+            self.elude_free_vars,
+            self.assumptions.as_deref(),
+        ));
+    }
+
+    /// Returns the assumptions set by the [`set_assumptions`](Self::set_assumptions) method.
+    ///
+    /// The assumptions are returned as an [`Option`] indicating whether assumptions have been set.
+    pub fn assumptions(&self) -> Option<Rc<Assumptions>> {
+        self.assumptions.as_ref().map(Rc::clone)
+    }
+
+    /// Resets this enumerator as if it had just been created.
+    #[allow(clippy::missing_panics_doc)]
+    pub fn reset(&mut self) {
+        let n_nodes = self.ddnnf.nodes().as_slice().len();
+        self.or_edge_indices = vec![0; n_nodes];
+        let free_vars = self.ddnnf.free_vars();
+        self.or_free_vars_assignments = free_vars.or_free_vars().clone();
+        self.root_free_vars_assignment = free_vars.root_free_vars().to_vec();
+        self.first_computed = false;
+        let mut model = vec![None; self.ddnnf.n_vars()];
+        self.assumptions = None;
+        assert!(Self::update_model_with_propagations(
+            &mut model,
+            &self.root_free_vars_assignment,
+            self.elude_free_vars,
+            None,
+        ));
+        self.model = model;
+        self.has_model = true;
     }
 
     /// Loads the model which the given id thanks to a [`DirectAccessEngine`].
@@ -129,6 +196,7 @@ impl<'a> ModelEnumerator<'a> {
     /// # Panics
     ///
     /// This function panics if the [`DirectAccessEngine`] does not refer to the same [`DecisionDNNF`] as this object.
+    /// It also panics if the [`ModelCounter`](crate::ModelCounter) referenced by the [`DirectAccessEngine`] and the [`ModelEnumerator`] do not share the same assumptions (their [`Rc`] must point to the same [`Assumptions`] object).
     pub fn jump_to(
         &mut self,
         direct_access_engine: &DirectAccessEngine,
@@ -138,6 +206,14 @@ impl<'a> ModelEnumerator<'a> {
             std::ptr::addr_eq(direct_access_engine.ddnnf(), self.ddnnf),
             "model enumerator and direct access engine do not refer to the same Decision-DNNF"
         );
+        assert_eq!(
+            direct_access_engine.model_counter().assumptions().is_some(),
+            self.assumptions.is_some(),
+            "direct access engines (via their model counter) and model enumerators must share the same assumptions object",
+        );
+        if let Some(a0) = direct_access_engine.model_counter().assumptions() {
+            assert!(Rc::ptr_eq(&a0, self.assumptions.as_ref().unwrap()), "direct access engines (via their model counter) and model enumerators must share the same assumptions object");
+        }
         let opt_model = direct_access_engine.model_with_graph(model_id);
         if let Some((model, or_edge_indices)) = opt_model {
             self.model = model;
@@ -196,6 +272,7 @@ impl<'a> ModelEnumerator<'a> {
             &mut self.model,
             &mut self.root_free_vars_assignment,
             self.elude_free_vars,
+            self.assumptions.as_deref(),
         ) && !self.next_path_from(NodeIndex::from(0))
         {
             self.has_model = false;
@@ -234,7 +311,14 @@ impl<'a> ModelEnumerator<'a> {
                     return true;
                 }
                 let edge = &self.ddnnf.edges()[edges[child_index]];
-                Self::update_model_with_propagations(&mut self.model, edge.propagated(), false);
+                if !Self::update_model_with_propagations(
+                    &mut self.model,
+                    edge.propagated(),
+                    false,
+                    self.assumptions.as_deref(),
+                ) {
+                    return false;
+                }
                 if self.next_path_from(edge.target()) {
                     return true;
                 }
@@ -264,6 +348,7 @@ impl<'a> ModelEnumerator<'a> {
             self.or_free_vars_assignments
                 .child_free_vars_mut(usize::from(or_node), child_index),
             self.elude_free_vars,
+            self.assumptions.as_deref(),
         )
     }
 
@@ -271,6 +356,7 @@ impl<'a> ModelEnumerator<'a> {
         model: &mut [Option<Literal>],
         interpretation: &mut [Literal],
         elude_free_vars: bool,
+        assumptions: Option<&Assumptions>,
     ) -> bool {
         if elude_free_vars {
             return false;
@@ -282,10 +368,17 @@ impl<'a> ModelEnumerator<'a> {
                 .for_each(|l| *l = l.flip());
             true
         } else {
-            interpretation.iter_mut().for_each(|l| *l = l.flip());
+            for l in interpretation.iter_mut() {
+                *l = l.flip();
+            }
             false
         };
-        Self::update_model_with_propagations(model, interpretation, false);
+        assert!(Self::update_model_with_propagations(
+            model,
+            interpretation,
+            false,
+            assumptions
+        ));
         has_next
     }
 
@@ -295,7 +388,14 @@ impl<'a> ModelEnumerator<'a> {
             Node::And(edges) => {
                 for edge_index in edges {
                     let edge = &self.ddnnf.edges()[*edge_index];
-                    Self::update_model_with_propagations(&mut self.model, edge.propagated(), false);
+                    if !Self::update_model_with_propagations(
+                        &mut self.model,
+                        edge.propagated(),
+                        false,
+                        self.assumptions.as_deref(),
+                    ) {
+                        return false;
+                    }
                     if !self.first_path_from(edge.target()) {
                         return false;
                     }
@@ -322,19 +422,43 @@ impl<'a> ModelEnumerator<'a> {
             usize::from(or_node_index),
             self.or_edge_indices[usize::from(or_node_index)],
         );
-        Self::update_model_with_propagations(&mut self.model, or_free_vars, self.elude_free_vars);
-        Self::update_model_with_propagations(&mut self.model, edge.propagated(), false);
+        assert!(Self::update_model_with_propagations(
+            &mut self.model,
+            or_free_vars,
+            self.elude_free_vars,
+            self.assumptions.as_deref(),
+        ));
+        if !Self::update_model_with_propagations(
+            &mut self.model,
+            edge.propagated(),
+            false,
+            self.assumptions.as_deref(),
+        ) {
+            return false;
+        }
         self.first_path_from(edge.target())
     }
 
+    #[must_use]
     fn update_model_with_propagations(
         model: &mut [Option<Literal>],
         propagations: &[Literal],
         update_with_none: bool,
-    ) {
+        assumptions: Option<&Assumptions>,
+    ) -> bool {
+        if let Some(assumps) = assumptions {
+            for p in propagations {
+                if let Some(b) = assumps[p.var_index()] {
+                    if b != p.polarity() {
+                        return false;
+                    }
+                }
+            }
+        }
         for p in propagations {
             model[p.var_index()] = if update_with_none { None } else { Some(*p) };
         }
+        true
     }
 }
 
@@ -354,6 +478,38 @@ mod tests {
             ddnnf.update_n_vars(n);
         }
         let mut model_enum = ModelEnumerator::new(&ddnnf, hide_free_vars);
+        assert_models_eq_with_enumerator(&mut model_enum, expected, hide_free_vars);
+    }
+
+    fn assert_models_eq_with_enumerator(
+        model_enum: &mut ModelEnumerator,
+        expected: &[Vec<isize>],
+        hide_free_vars: bool,
+    ) {
+        assert_models_eq_with_enumerator_no_jump(model_enum, expected);
+        let mut model_counter = ModelCounter::new(model_enum.ddnnf, false);
+        if let Some(a) = model_enum.assumptions() {
+            model_counter.set_assumptions(a);
+        }
+        let direct_access = DirectAccessEngine::new(&model_counter);
+        if hide_free_vars {
+            return;
+        }
+        for i in 0..expected.len() {
+            assert_models_eq_after_jump(
+                model_enum.ddnnf,
+                &expected[i + 1..],
+                hide_free_vars,
+                &direct_access,
+                i,
+            );
+        }
+    }
+
+    fn assert_models_eq_with_enumerator_no_jump(
+        model_enum: &mut ModelEnumerator,
+        expected: &[Vec<isize>],
+    ) {
         let mut actual = Vec::new();
         while let Some(m) = model_enum.compute_next_model() {
             actual.push(
@@ -363,20 +519,6 @@ mod tests {
             );
         }
         assert_eq!(expected, actual);
-        let model_counter = ModelCounter::new(&ddnnf, false);
-        let direct_access = DirectAccessEngine::new(&model_counter);
-        if hide_free_vars {
-            return;
-        }
-        for i in 0..expected.len() {
-            assert_models_eq_after_jump(
-                &ddnnf,
-                &expected[i + 1..],
-                hide_free_vars,
-                &direct_access,
-                i,
-            );
-        }
     }
 
     fn assert_models_eq_after_jump(
@@ -387,8 +529,10 @@ mod tests {
         model_id: usize,
     ) {
         let mut model_enum = ModelEnumerator::new(ddnnf, hide_free_vars);
+        if let Some(a) = direct_access_engine.model_counter().assumptions() {
+            model_enum.set_assumptions(a);
+        }
         model_enum.jump_to(direct_access_engine, model_id.into());
-        println!("model_enum after jump {model_id}: {model_enum:?}");
         let mut actual = Vec::new();
         while let Some(m) = model_enum.compute_next_model() {
             actual.push(
@@ -553,5 +697,90 @@ mod tests {
             None,
             false,
         );
+    }
+
+    #[test]
+    fn test_reset_root_free_vars() {
+        let mut ddnnf = D4Reader::default().read("t 1 0\n".as_bytes()).unwrap();
+        ddnnf.update_n_vars(2);
+        let expected = &[vec![-1, -2], vec![-1, 2], vec![1, -2], vec![1, 2]];
+        let mut model_enum = ModelEnumerator::new(&ddnnf, false);
+        assert_models_eq_with_enumerator(&mut model_enum, expected, false);
+        model_enum.reset();
+        assert_models_eq_with_enumerator(&mut model_enum, expected, false);
+    }
+
+    #[test]
+    fn test_reset_or_free_vars() {
+        let mut ddnnf = D4Reader::default()
+            .read("o 1 0\nt 2 0\n1 2 -1 0\n1 2 1 2 0\n".as_bytes())
+            .unwrap();
+        ddnnf.update_n_vars(3);
+        let expected = &[
+            vec![-1, -2, -3],
+            vec![-1, -2, 3],
+            vec![-1, 2, -3],
+            vec![-1, 2, 3],
+            vec![1, 2, -3],
+            vec![1, 2, 3],
+        ];
+        let mut model_enum = ModelEnumerator::new(&ddnnf, false);
+        assert_models_eq_with_enumerator(&mut model_enum, expected, false);
+        model_enum.reset();
+        assert_models_eq_with_enumerator(&mut model_enum, expected, false);
+    }
+
+    #[test]
+    fn test_model_enumerator_assumptions_root_free_vars() {
+        let mut ddnnf = D4Reader::default()
+            .read("o 1 0\nt 2 0\n1 2 -1 0\n1 2 1 2 0\n".as_bytes())
+            .unwrap();
+        ddnnf.update_n_vars(3);
+        let mut model_enum = ModelEnumerator::new(&ddnnf, false);
+        let assumptions = Rc::new(Assumptions::new(3, vec![Literal::from(3)]));
+        model_enum.set_assumptions(assumptions);
+        let expected = &[vec![-1, -2, 3], vec![-1, 2, 3], vec![1, 2, 3]];
+        assert_models_eq_with_enumerator(&mut model_enum, expected, false);
+    }
+
+    #[test]
+    fn test_model_enumerator_assumptions_or_free_vars() {
+        let ddnnf = D4Reader::default()
+            .read("o 1 0\nt 2 0\n1 2 -1 0\n1 2 1 2 0\n".as_bytes())
+            .unwrap();
+        let mut model_enum = ModelEnumerator::new(&ddnnf, false);
+        let assumptions = Rc::new(Assumptions::new(2, vec![Literal::from(2)]));
+        model_enum.set_assumptions(assumptions);
+        let expected = &[vec![-1, 2], vec![1, 2]];
+        assert_models_eq_with_enumerator(&mut model_enum, expected, false);
+    }
+
+    #[test]
+    fn test_model_enumerator_assumptions_becomes_unsat() {
+        let ddnnf = D4Reader::default()
+            .read("o 1 0\nt 2 0\n1 2 -1 0\n".as_bytes())
+            .unwrap();
+        let mut model_enum = ModelEnumerator::new(&ddnnf, false);
+        let assumptions = Rc::new(Assumptions::new(12, vec![Literal::from(1)]));
+        model_enum.set_assumptions(assumptions);
+        let expected = &[];
+        assert_models_eq_with_enumerator(&mut model_enum, expected, false);
+    }
+
+    #[test]
+    fn test_no_such_model_index() {
+        let mut ddnnf = D4Reader::default().read("t 1 0".as_bytes()).unwrap();
+        ddnnf.update_n_vars(1);
+        let counter = ModelCounter::new(&ddnnf, false);
+        let engine = DirectAccessEngine::new(&counter);
+        let mut enumerator = ModelEnumerator::new(&ddnnf, false);
+        assert!(enumerator.jump_to(&engine, Integer::from(3)).is_none());
+    }
+
+    #[test]
+    fn test_ask_for_one_but_unsat() {
+        let ddnnf = D4Reader::default().read("f 1 0".as_bytes()).unwrap();
+        let mut enumerator = ModelEnumerator::new(&ddnnf, false);
+        assert!(enumerator.compute_next_model().is_none());
     }
 }

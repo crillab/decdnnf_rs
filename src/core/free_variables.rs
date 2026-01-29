@@ -1,6 +1,6 @@
 use crate::{
     core::{InvolvedVars, Node, NodeIndex},
-    DecisionDNNF, Literal,
+    Assumptions, DecisionDNNF, Literal,
 };
 
 /// A structure used to computes the free variables, i.e. the variables that does not appear in some models.
@@ -10,7 +10,7 @@ use crate::{
 /// This function computes both kinds of free variables.
 ///
 /// Variables are encoded as literals, the polarity of which must be ignored.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FreeVariables {
     root_free_vars: Vec<Literal>,
     or_free_vars: OrFreeVariables,
@@ -51,6 +51,22 @@ impl FreeVariables {
     #[must_use]
     pub fn or_free_vars(&self) -> &OrFreeVariables {
         &self.or_free_vars
+    }
+
+    pub(crate) fn apply_assumptions(&self, assumptions: &Assumptions) -> Self {
+        Self {
+            root_free_vars: self
+                .root_free_vars
+                .iter()
+                .filter(|l| assumptions[l.var_index()].is_none())
+                .copied()
+                .collect(),
+            or_free_vars: self.or_free_vars.apply_assumptions(assumptions),
+        }
+    }
+
+    pub(crate) fn take(self) -> (Vec<Literal>, OrFreeVariables) {
+        (self.root_free_vars, self.or_free_vars)
     }
 }
 
@@ -165,6 +181,31 @@ impl OrFreeVariables {
             .iter()
             .map(|(start, length)| &self.data[*start..*start + *length])
     }
+
+    fn apply_assumptions(&self, assumptions: &Assumptions) -> Self {
+        let mut new_indices_and_lengths = Vec::with_capacity(self.indices_and_lengths.len());
+        let mut new_data = Vec::with_capacity(self.data.len());
+        let mut offset = 0;
+        for v in &self.indices_and_lengths {
+            let mut new_v = Vec::with_capacity(v.len());
+            for (i, l) in v {
+                let mut new_data_chunk = self.data[*i..*i + *l]
+                    .iter()
+                    .filter(|l| assumptions[l.var_index()].is_none())
+                    .copied()
+                    .collect::<Vec<_>>();
+                new_v.push((*i - offset, new_data_chunk.len()));
+                offset += *l - new_data_chunk.len();
+                new_data.append(&mut new_data_chunk);
+            }
+            new_indices_and_lengths.push(new_v);
+        }
+        new_data.shrink_to_fit();
+        Self {
+            indices_and_lengths: new_indices_and_lengths,
+            data: new_data,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -183,7 +224,16 @@ mod tests {
                 1 2 0";
         let ddnnf = D4Reader::default().read(instance.as_bytes()).unwrap();
         let free_vars = ddnnf.free_vars();
-        assert_eq!(&[] as &[Literal], free_vars.root_free_vars(),);
+        assert_eq!(&[] as &[Literal], free_vars.root_free_vars());
+        assert_eq!(
+            vec![
+                vec![(0_usize, 0_usize)],
+                vec![(0_usize, 0_usize), (0_usize, 1_usize)],
+                vec![]
+            ],
+            free_vars.or_free_vars.indices_and_lengths
+        );
+        assert_eq!(vec![Literal::from(-2)], free_vars.or_free_vars.data);
     }
 
     #[test]
@@ -191,7 +241,12 @@ mod tests {
         let instance = "t 1 0";
         let ddnnf = D4Reader::default().read(instance.as_bytes()).unwrap();
         let free_vars = ddnnf.free_vars();
-        assert_eq!(&[] as &[Literal], free_vars.root_free_vars(),);
+        assert_eq!(&[] as &[Literal], free_vars.root_free_vars());
+        assert_eq!(
+            vec![vec![]] as Vec<Vec<(usize, usize)>>,
+            free_vars.or_free_vars.indices_and_lengths
+        );
+        assert!(free_vars.or_free_vars.data.is_empty());
     }
 
     #[test]
@@ -202,6 +257,72 @@ mod tests {
                 1 2 1 0";
         let ddnnf = D4Reader::default().read(instance.as_bytes()).unwrap();
         let free_vars = ddnnf.free_vars();
-        assert_eq!(&[] as &[Literal], free_vars.root_free_vars(),);
+        assert_eq!(&[] as &[Literal], free_vars.root_free_vars());
+        assert_eq!(
+            vec![vec![(0_usize, 0_usize)], vec![]],
+            free_vars.or_free_vars.indices_and_lengths
+        );
+        assert!(free_vars.or_free_vars.data.is_empty());
+    }
+
+    #[test]
+    fn test_apply_assumptions_root() {
+        let instance = r"
+                o 1 0
+                t 2 0
+                1 2 3 0";
+        let ddnnf = D4Reader::default().read(instance.as_bytes()).unwrap();
+        let free_vars = ddnnf.free_vars();
+        assert_eq!(
+            &[Literal::from(-1), Literal::from(-2)],
+            free_vars.root_free_vars()
+        );
+        assert_eq!(
+            vec![vec![(0_usize, 0_usize)], vec![]],
+            free_vars.or_free_vars.indices_and_lengths
+        );
+        assert!(free_vars.or_free_vars.data.is_empty());
+        let free_vars_with_assumptions =
+            free_vars.apply_assumptions(&Assumptions::new(3, vec![Literal::from(-1)]));
+        assert_eq!(
+            &[Literal::from(-2)],
+            free_vars_with_assumptions.root_free_vars()
+        );
+        assert_eq!(
+            vec![vec![(0_usize, 0_usize)], vec![]],
+            free_vars_with_assumptions.or_free_vars.indices_and_lengths
+        );
+        assert!(free_vars_with_assumptions.or_free_vars.data.is_empty());
+    }
+
+    #[test]
+    fn test_apply_assumptions_or_node() {
+        let instance = r"
+                o 1 0
+                t 2 0
+                1 2 -1 -2 0
+                1 2 1 -3 0";
+        let ddnnf = D4Reader::default().read(instance.as_bytes()).unwrap();
+        let free_vars = ddnnf.free_vars();
+        assert!(free_vars.root_free_vars().is_empty());
+        assert_eq!(
+            vec![vec![(0_usize, 1_usize), (1_usize, 1_usize)], vec![]],
+            free_vars.or_free_vars.indices_and_lengths
+        );
+        assert_eq!(
+            vec![Literal::from(-3), Literal::from(-2)],
+            free_vars.or_free_vars.data,
+        );
+        let free_vars_with_assumptions =
+            free_vars.apply_assumptions(&Assumptions::new(3, vec![Literal::from(-2)]));
+        assert!(free_vars_with_assumptions.root_free_vars().is_empty());
+        assert_eq!(
+            vec![vec![(0_usize, 1_usize), (1_usize, 0_usize)], vec![]],
+            free_vars_with_assumptions.or_free_vars.indices_and_lengths
+        );
+        assert_eq!(
+            vec![Literal::from(-3)],
+            free_vars_with_assumptions.or_free_vars.data,
+        );
     }
 }

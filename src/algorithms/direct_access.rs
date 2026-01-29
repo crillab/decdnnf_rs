@@ -1,6 +1,6 @@
 use crate::{
     core::{Node, NodeIndex},
-    DecisionDNNF, Literal, ModelCounter,
+    DecisionDNNF, Literal, ModelCounter, OrFreeVariables,
 };
 use rug::Integer;
 
@@ -11,6 +11,8 @@ use rug::Integer;
 /// However, it will change when considering an equivalent formula with a different structure.
 pub struct DirectAccessEngine<'a> {
     model_counter: &'a ModelCounter<'a>,
+    root_free_vars: Vec<Literal>,
+    or_free_vars: OrFreeVariables,
 }
 
 impl<'a> DirectAccessEngine<'a> {
@@ -19,7 +21,21 @@ impl<'a> DirectAccessEngine<'a> {
     /// The formula under consideration is that of the model counter.
     #[must_use]
     pub fn new(model_counter: &'a ModelCounter<'a>) -> Self {
-        Self { model_counter }
+        let (root_free_vars, or_free_vars) = if let Some(assumptions) = model_counter.assumptions()
+        {
+            model_counter
+                .ddnnf()
+                .free_vars()
+                .apply_assumptions(&assumptions)
+                .take()
+        } else {
+            model_counter.ddnnf().free_vars().clone().take()
+        };
+        Self {
+            model_counter,
+            root_free_vars,
+            or_free_vars,
+        }
     }
 }
 
@@ -31,16 +47,23 @@ impl DirectAccessEngine<'_> {
     }
 
     /// Returns the model at the specified index.
+    ///
+    /// In case there is less models than the index, [`None`] is returned.
     #[must_use]
     pub fn model(&self, mut n: Integer) -> Option<Vec<Option<Literal>>> {
         if n >= *self.model_counter.global_count() {
             return None;
         }
         let mut model = vec![None; self.model_counter.ddnnf().n_vars()];
+        if let Some(assumptions) = self.model_counter.assumptions() {
+            for a in assumptions.as_slice() {
+                model[a.var_index()] = Some(*a);
+            }
+        }
         update_model_with_free_vars(
             &mut model,
             &mut n,
-            self.ddnnf().free_vars().root_free_vars(),
+            &self.root_free_vars,
             self.model_counter.partial_models(),
         );
         self.build_model_from(&mut model, n, NodeIndex::from(0), &mut |_, _| {});
@@ -59,11 +82,16 @@ impl DirectAccessEngine<'_> {
             return None;
         }
         let mut model = vec![None; self.model_counter.ddnnf().n_vars()];
+        if let Some(assumptions) = self.model_counter.assumptions() {
+            for a in assumptions.as_slice() {
+                model[a.var_index()] = Some(*a);
+            }
+        }
         let mut model_graph = vec![0; self.model_counter.ddnnf().nodes().as_slice().len()];
         update_model_with_free_vars(
             &mut model,
             &mut n,
-            self.ddnnf().free_vars().root_free_vars(),
+            &self.root_free_vars,
             self.model_counter.partial_models(),
         );
         self.build_model_from(
@@ -104,11 +132,7 @@ impl DirectAccessEngine<'_> {
                     let edge = &self.model_counter.ddnnf().edges()[*edge];
                     let target = edge.target();
                     let child_n_models = self.model_counter.count_from(target);
-                    let child_free_vars = self
-                        .ddnnf()
-                        .free_vars()
-                        .or_free_vars()
-                        .child_free_vars(usize::from(index), i);
+                    let child_free_vars = self.or_free_vars.child_free_vars(usize::from(index), i);
                     let total_child_n_models = if self.model_counter.partial_models() {
                         Integer::from(child_n_models)
                     } else {
@@ -141,6 +165,12 @@ impl DirectAccessEngine<'_> {
     pub fn ddnnf(&self) -> &DecisionDNNF {
         self.model_counter.ddnnf()
     }
+
+    /// Returns the underlying [`ModelCounter`].
+    #[must_use]
+    pub fn model_counter(&self) -> &ModelCounter<'_> {
+        self.model_counter
+    }
 }
 
 fn update_model_with_free_vars(
@@ -167,7 +197,8 @@ fn update_model_with_free_vars(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::D4Reader;
+    use crate::{Assumptions, D4Reader};
+    use std::rc::Rc;
 
     fn assert_models_eq(
         str_ddnnf: &str,
@@ -176,6 +207,7 @@ mod tests {
         expected_graphs: Vec<Vec<usize>>,
         expected_partial_graphs: Vec<Vec<usize>>,
         n_vars: Option<usize>,
+        assumptions: Option<Rc<Assumptions>>,
     ) {
         let mut ddnnf = D4Reader::default().read(str_ddnnf.as_bytes()).unwrap();
         if let Some(n) = n_vars {
@@ -185,7 +217,10 @@ mod tests {
             .into_iter()
             .zip(expected_graphs)
             .collect::<Vec<_>>();
-        let model_counter = ModelCounter::new(&ddnnf, false);
+        let mut model_counter = ModelCounter::new(&ddnnf, false);
+        if let Some(assumps) = assumptions.as_ref().map(Rc::clone) {
+            model_counter.set_assumptions(assumps);
+        }
         let engine = DirectAccessEngine::new(&model_counter);
         let actual_models = compute_models(&engine);
         assert_eq!(expected_models_with_graphs, actual_models);
@@ -193,7 +228,10 @@ mod tests {
             .into_iter()
             .zip(expected_partial_graphs)
             .collect::<Vec<_>>();
-        let path_counter = ModelCounter::new(&ddnnf, true);
+        let mut path_counter = ModelCounter::new(&ddnnf, true);
+        if let Some(assumps) = assumptions {
+            path_counter.set_assumptions(assumps);
+        }
         let engine = DirectAccessEngine::new(&path_counter);
         let actual_partial_models = compute_models(&engine);
         assert_eq!(expected_partial_models_with_graphs, actual_partial_models);
@@ -218,7 +256,7 @@ mod tests {
 
     #[test]
     fn test_unsat() {
-        assert_models_eq("f 1 0\n", vec![], vec![], vec![], vec![], None);
+        assert_models_eq("f 1 0\n", vec![], vec![], vec![], vec![], None, None);
     }
 
     #[test]
@@ -229,6 +267,7 @@ mod tests {
             vec![vec![1]],
             vec![vec![0, 0]],
             vec![vec![0, 0]],
+            None,
             None,
         );
     }
@@ -242,6 +281,7 @@ mod tests {
             vec![vec![0], vec![0]],
             vec![vec![0], vec![0]],
             Some(1),
+            None,
         );
     }
 
@@ -254,6 +294,7 @@ mod tests {
             vec![vec![0], vec![0], vec![0], vec![0]],
             vec![vec![0], vec![0], vec![0], vec![0]],
             Some(2),
+            None,
         );
     }
 
@@ -265,6 +306,7 @@ mod tests {
             vec![vec![-1], vec![1]],
             vec![vec![0, 0], vec![1, 0]],
             vec![vec![0, 0], vec![1, 0]],
+            None,
             None,
         );
     }
@@ -278,6 +320,7 @@ mod tests {
             vec![vec![0, 0], vec![0, 0], vec![1, 0], vec![1, 0]],
             vec![vec![0, 0], vec![1, 0]],
             Some(2),
+            None,
         );
     }
 
@@ -289,6 +332,7 @@ mod tests {
             vec![vec![-1, -2]],
             vec![vec![0, 0]],
             vec![vec![0, 0]],
+            None,
             None,
         );
     }
@@ -312,6 +356,7 @@ mod tests {
                 vec![0, 1, 1, 0],
             ],
             None,
+            None,
         );
     }
 
@@ -323,6 +368,7 @@ mod tests {
             vec![vec![-1, -2], vec![1, 2]],
             vec![vec![0, 0, 0, 0], vec![1, 0, 0, 0]],
             vec![vec![0, 0, 0, 0], vec![1, 0, 0, 0]],
+            None,
             None,
         );
     }
@@ -341,6 +387,7 @@ mod tests {
             vec![vec![-1, -2], vec![1]],
             vec![vec![0, 0, 0], vec![0, 1, 0], vec![0, 1, 0]],
             vec![vec![0, 0, 0], vec![0, 1, 0], vec![0, 1, 0]],
+            None,
             None,
         );
     }
@@ -361,6 +408,65 @@ mod tests {
             vec![vec![0, 0, 0, 0], vec![0, 0, 0, 0]],
             vec![vec![0, 0, 0, 0], vec![0, 0, 0, 0]],
             Some(2),
+            None,
         );
+    }
+
+    #[test]
+    fn test_root_free_vars_with_assumptions() {
+        assert_models_eq(
+            "t 1 0\n",
+            vec![vec![-1, -2], vec![-1, 2]],
+            vec![vec![-1]],
+            vec![vec![0], vec![0]],
+            vec![vec![0]],
+            Some(2),
+            Some(Rc::new(Assumptions::new(2, vec![Literal::from(-1)]))),
+        );
+        assert_models_eq(
+            "t 1 0\n",
+            vec![vec![-1, -2], vec![1, -2]],
+            vec![vec![-2]],
+            vec![vec![0], vec![0]],
+            vec![vec![0]],
+            Some(2),
+            Some(Rc::new(Assumptions::new(2, vec![Literal::from(-2)]))),
+        );
+    }
+
+    #[test]
+    fn test_becomes_unsat_with_assumptions() {
+        assert_models_eq(
+            "o 1 0\nt 2 0\n1 2 -1 0",
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            None,
+            Some(Rc::new(Assumptions::new(2, vec![Literal::from(1)]))),
+        );
+    }
+
+    #[test]
+    fn test_or_free_vars_with_assumptions() {
+        assert_models_eq(
+            "o 1 0\nt 2 0\n1 2 -1 0\n1 2 1 2 0\n",
+            vec![vec![-1, -2]],
+            vec![vec![-1, -2]],
+            vec![vec![0, 0]],
+            vec![vec![0, 0]],
+            None,
+            Some(Rc::new(Assumptions::new(2, vec![Literal::from(-2)]))),
+        );
+    }
+
+    #[test]
+    fn test_no_such_model_index() {
+        let mut ddnnf = D4Reader::default().read("t 1 0".as_bytes()).unwrap();
+        ddnnf.update_n_vars(1);
+        let counter = ModelCounter::new(&ddnnf, false);
+        let engine = DirectAccessEngine::new(&counter);
+        assert!(engine.model(Integer::from(3)).is_none());
+        assert!(engine.model_with_graph(Integer::from(3)).is_none());
     }
 }

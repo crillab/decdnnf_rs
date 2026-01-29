@@ -1,5 +1,6 @@
+use std::rc::Rc;
 use super::ModelCounter;
-use crate::{DecisionDNNF, Literal};
+use crate::{Assumptions, DecisionDNNF, Literal};
 use anyhow::{anyhow, Result};
 use rug::Integer;
 
@@ -42,6 +43,8 @@ impl<'a> OrderedDirectAccessEngine<'a> {
     }
 
     /// Returns the model at the given index.
+    ///
+    /// In case there is less models than the index, [`None`] is returned.
     #[must_use]
     #[allow(clippy::missing_panics_doc)]
     pub fn model(&self, mut n: Integer) -> Option<Vec<Literal>> {
@@ -53,7 +56,7 @@ impl<'a> OrderedDirectAccessEngine<'a> {
         let mut model_counter = ModelCounter::new(self.ddnnf, false);
         while model.len() != n_vars {
             model.push(self.order[model.len()]);
-            model_counter.set_assumptions(&model);
+            model_counter.set_assumptions(Rc::new(Assumptions::new(n_vars, model.clone())));
             let current_n_models = model_counter.global_count();
             if &n > current_n_models {
                 let popped = model.pop().unwrap();
@@ -158,5 +161,13 @@ mod tests {
             OrderedDirectAccessEngine::new(&ddnnf, vec![Literal::from(1), Literal::from(1)])
                 .is_err()
         );
+    }
+
+    #[test]
+    fn test_no_such_model_index() {
+        let mut ddnnf = D4Reader::default().read("t 1 0".as_bytes()).unwrap();
+        ddnnf.update_n_vars(1);
+        let engine = OrderedDirectAccessEngine::new(&ddnnf, vec![Literal::from(1)]).unwrap();
+        assert!(engine.model(Integer::from(3)).is_none());
     }
 }

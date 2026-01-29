@@ -28,9 +28,14 @@ impl<'a> super::command::Command<'a> for Command {
         let ddnnf = common::read_input_ddnnf(arg_matches)?;
         let assumptions = common::read_assumptions(&ddnnf, arg_matches)?;
         let model_finder = ModelFinder::new(&ddnnf);
-        if let Some(model) = model_finder.find_model_under_assumptions(&assumptions) {
+        let model = if let Some(a) = assumptions {
+            model_finder.find_model_under_assumptions(a.as_slice())
+        } else {
+            model_finder.find_model()
+        };
+        if let Some(m) = model {
             println!("s SATISFIABLE");
-            common::print_dimacs_model(&model);
+            common::print_dimacs_model(&m);
         } else {
             println!("s UNSATISFIABLE");
         }

@@ -10,6 +10,7 @@ pub use algorithms::OrderedDirectAccessEngine;
 pub use algorithms::OrphanFinder;
 
 mod core;
+pub use core::Assumptions;
 pub use core::DecisionDNNF;
 pub use core::Edge;
 pub use core::EdgeIndex;

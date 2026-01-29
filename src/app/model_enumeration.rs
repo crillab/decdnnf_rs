@@ -1,11 +1,11 @@
 use super::{cli_manager, common, model_writer::ModelWriter};
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 use decdnnf_rs::{DirectAccessEngine, Literal, ModelCounter, ModelEnumerator, ModelFinder};
 use log::info;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use rug::Integer;
-use std::{io::Write, sync::Mutex};
+use std::{io::Write, rc::Rc, sync::Mutex};
 
 #[derive(Default)]
 pub struct Command;
@@ -47,6 +47,7 @@ impl<'a> super::command::Command<'a> for Command {
                     .multiple(false)
                     .help("sets the maximal number of threads to use"),
             )
+            .arg(common::arg_assumptions())
     }
 
     fn execute(&self, arg_matches: &ArgMatches<'_>) -> anyhow::Result<()> {
@@ -77,6 +78,7 @@ pub(crate) fn arg_do_not_print<'a>() -> Arg<'a, 'a> {
 
 fn enum_default(arg_matches: &ArgMatches<'_>) -> anyhow::Result<()> {
     let ddnnf = common::read_input_ddnnf(arg_matches)?;
+    let assumptions = common::read_assumptions(&ddnnf, arg_matches)?;
     common::log_time_for_step("free variables computation", || {
         ddnnf.free_vars();
     });
@@ -88,6 +90,9 @@ fn enum_default(arg_matches: &ArgMatches<'_>) -> anyhow::Result<()> {
         );
         let mut model_iterator =
             ModelEnumerator::new(&ddnnf, arg_matches.is_present(ARG_COMPACT_FREE_VARS));
+        if let Some(a) = assumptions {
+            model_iterator.set_assumptions(Rc::new(a));
+        }
         while let Some(model) = model_iterator.compute_next_model() {
             model_writer.write_model_ordered(model);
         }
@@ -99,13 +104,12 @@ fn enum_default(arg_matches: &ArgMatches<'_>) -> anyhow::Result<()> {
 
 fn enum_default_parallel(arg_matches: &ArgMatches<'_>) -> anyhow::Result<()> {
     let ddnnf = common::read_input_ddnnf(arg_matches)?;
+    let assumptions = common::read_assumptions(&ddnnf, arg_matches)?;
     common::log_time_for_step("free variables computation", || {
         ddnnf.free_vars();
     });
     common::log_time_for_step("model enumeration", || {
         let compact_display = arg_matches.is_present(ARG_COMPACT_FREE_VARS);
-        let model_counter = ModelCounter::new(&ddnnf, compact_display);
-        let n_models = model_counter.global_count();
         let next_min_bound = Mutex::new(Integer::ZERO);
         let writers_n_enumerated = Mutex::new(Integer::ZERO);
         let writers_n_models = Mutex::new(Integer::ZERO);
@@ -113,12 +117,21 @@ fn enum_default_parallel(arg_matches: &ArgMatches<'_>) -> anyhow::Result<()> {
             .context("while parsing the number of threads provided on the command line")?;
         info!("parallel enumeration using {n_threads} threads");
         (0..n_threads).into_par_iter().for_each(|_| {
+            let mut model_counter = ModelCounter::new(&ddnnf, compact_display);
+            let thread_local_assumptions = assumptions.as_ref().map(|a| Rc::new(a.clone()));
+            if let Some(a) = thread_local_assumptions.as_ref() {
+                model_counter.set_assumptions(Rc::clone(a));
+            }
+            let n_models = model_counter.global_count();
             let mut model_writer = ModelWriter::new_unlocked(
                 ddnnf.n_vars(),
                 compact_display,
                 arg_matches.is_present(ARG_DO_NOT_PRINT),
             );
             let mut model_iterator = ModelEnumerator::new(&ddnnf, compact_display);
+            if let Some(a) = thread_local_assumptions.as_ref() {
+                model_iterator.set_assumptions(Rc::clone(a));
+            }
             let direct_access_engine = DirectAccessEngine::new(&model_counter);
             loop {
                 let mut lock = next_min_bound.lock().unwrap();
@@ -158,8 +171,14 @@ fn enum_default_parallel(arg_matches: &ArgMatches<'_>) -> anyhow::Result<()> {
     })
 }
 
+#[deprecated(note = "inefficient algorithm used for comparison purpose")]
 fn enum_decision_tree(arg_matches: &ArgMatches<'_>) -> anyhow::Result<()> {
     let ddnnf = common::read_input_ddnnf(arg_matches)?;
+    if common::read_assumptions(&ddnnf, arg_matches)?.is_some() {
+        return Err(anyhow!(
+            "decision-tree-based enumeration cannot use assumptions"
+        ));
+    }
     common::log_time_for_step("model enumeration", || {
         info!("model enumeration using a decision tree");
         let mut model_writer = ModelWriter::new_locked(
@@ -194,10 +213,9 @@ fn enum_decision_tree(arg_matches: &ArgMatches<'_>) -> anyhow::Result<()> {
                     update_stack(&last_model, assumptions.len(), &mut stack);
                 }
             } else {
-                let opt_model = model_finder.find_model_under_assumptions(&assumptions);
-                if opt_model.is_some() {
-                    let mut new_model = opt_model.unwrap();
-                    std::mem::swap(&mut last_model, &mut new_model);
+                let mut opt_model = model_finder.find_model_under_assumptions(&assumptions);
+                if let Some(ref mut new_model) = opt_model {
+                    std::mem::swap(&mut last_model, new_model);
                     if assumptions.len() == ddnnf.n_vars() {
                         model_writer.write_model_no_opt(&last_model);
                     } else {

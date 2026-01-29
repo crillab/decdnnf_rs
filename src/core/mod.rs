@@ -1,3 +1,6 @@
+mod assumptions;
+pub use assumptions::Assumptions;
+
 mod decision_dnnf;
 pub use decision_dnnf::DecisionDNNF;
 pub use decision_dnnf::Edge;

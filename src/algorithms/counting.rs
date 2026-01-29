@@ -1,9 +1,9 @@
 use crate::{
     core::{EdgeIndex, Node, NodeIndex},
-    DecisionDNNF, Literal,
+    Assumptions, DecisionDNNF, Literal,
 };
 use rug::Integer;
-use std::sync::OnceLock;
+use std::{rc::Rc, sync::OnceLock};
 
 static INTEGER_ZERO: Integer = Integer::ZERO;
 
@@ -24,7 +24,7 @@ static INTEGER_ZERO: Integer = Integer::ZERO;
 /// ```
 pub struct ModelCounter<'a> {
     ddnnf: &'a DecisionDNNF,
-    assumptions: Option<Vec<Option<bool>>>,
+    assumptions: Option<Rc<Assumptions>>,
     n_models: OnceLock<Vec<Option<Integer>>>,
     partial_models: bool,
 }
@@ -56,17 +56,16 @@ impl<'a> ModelCounter<'a> {
     /// # Panics
     ///
     /// This function panics if the set of assumptions includes the same variable more than once.
-    pub fn set_assumptions(&mut self, assumptions: &[Literal]) {
-        let mut assumps = vec![None; self.ddnnf.n_vars()];
-        for a in assumptions {
-            assert!(a.var_index() < self.ddnnf.n_vars(), "undefined variable");
-            assert!(
-                assumps[a.var_index()].replace(a.polarity()).is_none(),
-                "multiple definition of the same variable in assumptions"
-            );
-        }
-        self.assumptions = Some(assumps);
+    pub fn set_assumptions(&mut self, assumptions: Rc<Assumptions>) {
+        self.assumptions = Some(assumptions);
         self.n_models.take();
+    }
+
+    /// Returns the assumptions set by the [`set_assumptions`](Self::set_assumptions) method.
+    ///
+    /// The assumptions are returned as an [`Option`] indicating whether assumptions have been set.
+    pub fn assumptions(&self) -> Option<Rc<Assumptions>> {
+        self.assumptions.as_ref().map(Rc::clone)
     }
 
     fn get_or_compute_n_models(&self) -> &[Option<Integer>] {
@@ -176,7 +175,7 @@ fn compute_models_from<'a>(
     or_children_free_vars_len: &[Vec<usize>],
     index: NodeIndex,
     n_models: &mut [Option<Integer>],
-    assumptions: Option<&[Option<bool>]>,
+    assumptions: Option<&Assumptions>,
 ) {
     if n_models[usize::from(index)].is_some() {
         return;
@@ -259,33 +258,29 @@ mod tests {
         n_vars: Option<usize>,
         expected_model_count: usize,
         expected_path_count: usize,
-        assumptions: Option<Vec<isize>>,
+        assumptions_vec: Option<Vec<isize>>,
     ) {
         let mut ddnnf = D4Reader::default().read(instance.as_bytes()).unwrap();
         if let Some(n) = n_vars {
             ddnnf.update_n_vars(n);
         }
+        let assumptions = assumptions_vec.map(|v| {
+            Rc::new(Assumptions::new(
+                ddnnf.n_vars(),
+                v.iter().map(|i| Literal::from(*i)).collect::<Vec<_>>(),
+            ))
+        });
         let mut model_counter = ModelCounter::new(&ddnnf, false);
-        if let Some(assumps) = assumptions.clone() {
-            model_counter.set_assumptions(
-                &assumps
-                    .iter()
-                    .map(|i| Literal::from(*i))
-                    .collect::<Vec<_>>(),
-            );
+        if let Some(assumps) = &assumptions {
+            model_counter.set_assumptions(Rc::clone(assumps));
         }
         assert_eq!(
             expected_model_count,
             model_counter.global_count().to_usize_wrapping()
         );
         let mut path_counter = ModelCounter::new(&ddnnf, true);
-        if let Some(assumps) = assumptions {
-            path_counter.set_assumptions(
-                &assumps
-                    .iter()
-                    .map(|i| Literal::from(*i))
-                    .collect::<Vec<_>>(),
-            );
+        if let Some(assumps) = &assumptions {
+            path_counter.set_assumptions(Rc::clone(assumps));
         }
         assert_eq!(
             expected_path_count,

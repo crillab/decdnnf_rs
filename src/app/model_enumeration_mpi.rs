@@ -12,6 +12,7 @@ use mpi::{
 use rug::Integer;
 use serde::{de::DeserializeOwned, Serialize};
 
+#[deprecated(note = "not used, hard to maintain, not sure of performances")]
 #[derive(Default)]
 pub struct Command;
 

@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Context, Result};
 use clap::{Arg, ArgMatches};
-use decdnnf_rs::{D4Reader, DecisionDNNF, DecisionDNNFChecker, Literal};
+use decdnnf_rs::{Assumptions, D4Reader, DecisionDNNF, DecisionDNNFChecker, Literal};
 use log::{info, warn};
 use std::{
     fs::{self, File},
@@ -51,7 +51,7 @@ pub(crate) fn arg_assumptions<'a>() -> Arg<'a, 'a> {
 pub(crate) fn read_assumptions(
     ddnnf: &DecisionDNNF,
     arg_matches: &ArgMatches<'_>,
-) -> Result<Vec<Literal>> {
+) -> Result<Option<Assumptions>> {
     let ctx = "while parsing assumptions";
     let assumptions = if let Some(str_assumptions) = arg_matches.value_of(ARG_ASSUMPTIONS) {
         str_assumptions
@@ -64,7 +64,7 @@ pub(crate) fn read_assumptions(
             .collect::<Result<Vec<_>, _>>()
             .context(ctx)
     } else {
-        Ok(vec![])
+        return Ok(None);
     };
     if let Ok(a) = &assumptions {
         if a.iter().any(|l| l.var_index() >= ddnnf.n_vars()) {
@@ -73,7 +73,7 @@ pub(crate) fn read_assumptions(
             );
         }
     }
-    assumptions
+    assumptions.map(|lits| Some(Assumptions::new(ddnnf.n_vars(), lits)))
 }
 
 pub(crate) fn read_input_ddnnf(arg_matches: &ArgMatches<'_>) -> Result<DecisionDNNF> {

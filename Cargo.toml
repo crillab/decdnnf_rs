@@ -8,7 +8,7 @@ categories = ["command-line-utilities", "science"]
 keywords = ["decision", "DNNF", "model", "counting", "enumeration"]
 homepage = "https://www.cril.univ-artois.fr/software/decdnnf-rs/"
 repository = "https://github.com/crillab/decdnnf_rs"
-rust-version = "1.87.0"
+rust-version = "1.76.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

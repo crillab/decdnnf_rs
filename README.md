@@ -84,6 +84,12 @@ Assumptions can be provided using the `-a` option:
 decdnnf_rs compute-model -i instance.nnf -a '1 2'
 ```
 
+As described above, use the `-h` flag to get more information on this command:
+
+```bash
+decdnnf_rs compute-model -h'
+```
+
 ### Count the models of a Decision-DNNF
 
 Use the `model-counting` command:
@@ -91,6 +97,8 @@ Use the `model-counting` command:
 ```bash
 decdnnf_rs model-counting -i instance.nnf
 ```
+
+The `-a` (assumptions) and `-h` (help) options function similarly to those of the previous command.
 
 ### Enumerate the models of a Decision-DNNF
 
@@ -102,6 +110,8 @@ decdnnf_rs model-enumeration -i instance.nnf
 
 This command has multiple options that affect both the algorithm used to enumerate solutions and the format used to output the model.
 For more information on these algorithms and formats, see our research paper *[Leveraging Decision-DNNF Compilation for Enumerating Disjoint Partial Models](https://doi.org/10.24963/kr.2024/48) and the command help (`decdnnf_rs model-enumeration -h`)*.
+
+Again, the `-a` (assumptions) and `-h` (help) options function similarly to those of the previous command.
 
 ### Direct access to a model
 

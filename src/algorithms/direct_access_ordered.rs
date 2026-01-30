@@ -1,8 +1,8 @@
-use std::rc::Rc;
 use super::ModelCounter;
 use crate::{Assumptions, DecisionDNNF, Literal};
 use anyhow::{anyhow, Result};
 use rug::Integer;
+use std::rc::Rc;
 
 /// An object that, given a complete order on the models of a [`DecisionDNNF`] computed internally, allows the k-th model to be returned.
 ///

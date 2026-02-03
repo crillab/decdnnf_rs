@@ -77,7 +77,7 @@ impl<'a> OrderedDirectAccessEngine<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::D4Reader;
+    use crate::{D4Reader, DecisionDNNFReader};
 
     fn compute_models_ordered(ddnnf: &DecisionDNNF, order: &[isize]) -> Vec<Vec<isize>> {
         let lit_order = order.iter().map(|i| Literal::from(*i)).collect::<Vec<_>>();

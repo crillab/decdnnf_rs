@@ -197,7 +197,7 @@ fn update_model_with_free_vars(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Assumptions, D4Reader};
+    use crate::{Assumptions, D4Reader, DecisionDNNFReader};
     use std::rc::Rc;
 
     fn assert_models_eq(

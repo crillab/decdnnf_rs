@@ -1,15 +1,19 @@
 use anyhow::{anyhow, Context, Result};
 use clap::{Arg, ArgMatches};
-use decdnnf_rs::{Assumptions, D4Reader, DecisionDNNF, DecisionDNNFChecker, Literal};
+use decdnnf_rs::{
+    Assumptions, BinaryReader, BinaryWriter, C2dWriter, D4Reader, D4Writer, DecisionDNNF,
+    DecisionDNNFChecker, DecisionDNNFReader, DecisionDNNFWriter, Literal, SmartReader,
+};
 use log::{info, warn};
 use std::{
     fs::{self, File},
-    io::BufReader,
+    io::{BufReader, Write},
     path::PathBuf,
     time::SystemTime,
 };
 
 const ARG_INPUT: &str = "ARG_INPUT";
+const ARG_INPUT_FORMAT: &str = "ARG_INPUT_FORMAT";
 const ARG_N_VARS: &str = "ARG_N_VARS";
 const ARG_DO_NOT_CHECK_DDNNF: &str = "ARG_DO_NOT_CHECK_DDNNF";
 
@@ -22,6 +26,13 @@ pub(crate) fn args_input<'a>() -> Vec<Arg<'a, 'a>> {
             .multiple(false)
             .help("the input file that contains the Decision-DNNF formula")
             .required(true),
+        Arg::with_name(ARG_INPUT_FORMAT)
+            .long("input-format")
+            .empty_values(false)
+            .multiple(false)
+            .possible_values(&["bin", "d4", "smart"])
+            .default_value("smart")
+            .help("the format of the input file (default is smart)"),
         Arg::with_name(ARG_N_VARS)
             .long("n-vars")
             .empty_values(false)
@@ -86,11 +97,17 @@ pub(crate) fn read_input_ddnnf_step(arg_matches: &ArgMatches<'_>) -> Result<Deci
     let input_file_canonicalized = realpath_from_arg(arg_matches, ARG_INPUT)?;
     info!("reading input file {:?}", input_file_canonicalized);
     let file_reader = BufReader::new(File::open(input_file_canonicalized)?);
-    let mut reader = D4Reader::default();
+    let mut reader: Box<dyn DecisionDNNFReader<BufReader<File>>> =
+        match arg_matches.value_of(ARG_INPUT_FORMAT).unwrap() {
+            "bin" => Box::new(BinaryReader),
+            "d4" => Box::new(D4Reader::default()),
+            "smart" => Box::new(SmartReader::default()),
+            _ => unreachable!(),
+        };
     let do_not_check = arg_matches.is_present(ARG_DO_NOT_CHECK_DDNNF);
     if do_not_check {
         info!("skipping input formula correctness checks; an incorrect input formula may lead to an undefined behavior");
-        reader.set_do_not_check(true);
+        DecisionDNNFReader::<BufReader<File>>::set_do_not_check(reader.as_mut(), true);
     }
     let mut ddnnf = reader
         .read(file_reader)
@@ -138,4 +155,63 @@ where
     let result = step();
     info!("{step_name} took {:?}", start_time.elapsed().unwrap());
     result
+}
+
+const ARG_OUTPUT: &str = "ARG_OUTPUT";
+const ARG_OUTPUT_OVERWRITE: &str = "ARG_OUTPUT_OVERWRITE";
+const ARG_OUTPUT_FORMAT: &str = "ARG_OUTPUT_FORMAT";
+
+pub(crate) fn args_output<'a>() -> Vec<Arg<'a, 'a>> {
+    vec![
+        Arg::with_name(ARG_OUTPUT)
+            .short("o")
+            .long("output")
+            .empty_values(false)
+            .multiple(false)
+            .help("the output file for the generated formula (default is stdout)"),
+        Arg::with_name(ARG_OUTPUT_OVERWRITE)
+            .long("overwrite-output")
+            .takes_value(false)
+            .help("overwrite the output file if it exists"),
+        Arg::with_name(ARG_OUTPUT_FORMAT)
+            .short("f")
+            .long("output-format")
+            .empty_values(false)
+            .multiple(false)
+            .possible_values(&["bin", "c2d", "d4"])
+            .default_value("d4")
+            .help("the output format for the generated formula (default is d4)"),
+    ]
+}
+
+pub(crate) fn create_output_file_writer(arg_matches: &ArgMatches<'_>) -> Result<Box<dyn Write>> {
+    if let Some(output) = arg_matches.value_of(ARG_OUTPUT) {
+        let output_file = if arg_matches.is_present(ARG_OUTPUT_OVERWRITE) {
+            File::create(output).context("while creating output file")?
+        } else {
+            File::create_new(output).context("while creating output file")?
+        };
+        info!(
+            "using {:?} as output file",
+            fs::canonicalize(PathBuf::from(output)).context("while canonicalizing output path")?
+        );
+        Ok(Box::new(output_file))
+    } else {
+        info!("using standard output for the generated formula");
+        Ok(Box::new(std::io::stdout()))
+    }
+}
+
+pub(crate) fn create_output_formula_writer<W>(
+    arg_matches: &ArgMatches<'_>,
+) -> Box<dyn DecisionDNNFWriter<W>>
+where
+    W: Write,
+{
+    match arg_matches.value_of(ARG_OUTPUT_FORMAT).unwrap() {
+        "bin" => Box::new(BinaryWriter),
+        "c2d" => Box::new(C2dWriter),
+        "d4" => Box::new(D4Writer),
+        _ => unreachable!(),
+    }
 }

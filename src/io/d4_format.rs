@@ -1,5 +1,5 @@
 use crate::core::{Edge, Node};
-use crate::{DecisionDNNF, Literal, OrphanFinder};
+use crate::{DecisionDNNF, DecisionDNNFReader, DecisionDNNFWriter, Literal, OrphanFinder};
 use anyhow::{anyhow, Context, Result};
 use std::io::{BufWriter, Write};
 use std::str::FromStr;
@@ -27,9 +27,11 @@ pub struct Reader {
     do_not_check: bool,
 }
 
-impl Reader {
-    /// Sets whether the reader must activate its checks or not.
-    pub fn set_do_not_check(&mut self, do_not_check: bool) {
+impl<R> DecisionDNNFReader<R> for Reader
+where
+    R: Read,
+{
+    fn set_do_not_check(&mut self, do_not_check: bool) {
         self.do_not_check = do_not_check;
     }
 
@@ -42,7 +44,7 @@ impl Reader {
     /// # Example
     ///
     /// ```
-    /// use decdnnf_rs::{DecisionDNNF, D4Reader, ModelCounter};
+    /// use decdnnf_rs::{DecisionDNNF, DecisionDNNFReader, D4Reader, ModelCounter};
     /// use rug::Integer;
     ///
     /// fn load_decision_dnnf_and_model_count(str_ddnnf: &str) -> Result<(DecisionDNNF, Integer), String> {
@@ -54,10 +56,7 @@ impl Reader {
     /// }
     /// # load_decision_dnnf_and_model_count("t 1 0").unwrap();
     /// ```
-    pub fn read<R>(&self, reader: R) -> Result<DecisionDNNF>
-    where
-        R: Read,
-    {
+    fn read(&self, reader: R) -> Result<DecisionDNNF> {
         let mut reader = BufReader::new(reader);
         let mut buffer = String::new();
         let context = "while parsing a d4 formatted Decision-DNNF";
@@ -114,7 +113,9 @@ impl Reader {
         }
         Ok(ddnnf)
     }
+}
 
+impl Reader {
     fn add_new_node(
         reader_data: &mut D4FormatReaderData,
         first_word: &str,
@@ -165,18 +166,14 @@ impl Reader {
 }
 
 /// A structure used for writing a decision-DNNF using the [d4](https://github.com/crillab/d4) output format.
+#[derive(Default)]
 pub struct Writer;
 
-impl Writer {
-    /// Writes a Decision-DNNF in the d4 format.
-    ///
-    /// # Errors
-    ///
-    /// An error is raised when an I/O exception occurs.
-    pub fn write<W>(mut writer: W, ddnnf: &DecisionDNNF) -> Result<()>
-    where
-        W: Write,
-    {
+impl<W> DecisionDNNFWriter<W> for Writer
+where
+    W: Write,
+{
+    fn write(&self, mut writer: W, ddnnf: &DecisionDNNF) -> Result<()> {
         let mut bufwriter = BufWriter::new(&mut writer);
         let mut edge_src = vec![0; ddnnf.n_edges()];
         for (i, node) in ddnnf.nodes().as_slice().iter().enumerate() {
@@ -389,7 +386,7 @@ mod tests {
     #[test]
     fn test_do_not_check() {
         let mut reader = Reader::default();
-        reader.set_do_not_check(true);
+        DecisionDNNFReader::<&[u8]>::set_do_not_check(&mut reader, true);
         assert!(reader.read(&mut "f 1 0\nt 2 0\n".as_bytes()).is_ok());
         assert!(reader
             .read(&mut "a 1 0\na 2 0\n1 2 0\n2 1 0\n".as_bytes())
@@ -445,7 +442,7 @@ mod tests {
             "a 1 0\no 2 0\no 3 0\nt 4 0\n1 2 0\n1 3 0\n2 4 -1 0\n2 4 1 0\n3 4 -2 0\n3 4 2 0\n";
         let ddnnf = read_correct_ddnnf(instance);
         let mut buf: Vec<u8> = Vec::new();
-        Writer::write(&mut buf, &ddnnf).unwrap();
+        Writer.write(&mut buf, &ddnnf).unwrap();
         assert_eq!(instance, String::from_utf8(buf).unwrap());
     }
 }

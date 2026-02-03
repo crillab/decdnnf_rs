@@ -14,7 +14,7 @@ static INTEGER_ZERO: Integer = Integer::ZERO;
 /// # Example
 ///
 /// ```
-/// use decdnnf_rs::{DecisionDNNF, ModelCounter};
+/// use decdnnf_rs::{DecisionDNNF, DecisionDNNFReader, ModelCounter};
 ///
 /// fn count_models(ddnnf: &DecisionDNNF) {
 ///     let model_counter = ModelCounter::new(ddnnf, false);
@@ -236,7 +236,7 @@ fn compute_models_from<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::D4Reader;
+    use crate::{D4Reader, DecisionDNNFReader};
 
     fn assert_counts(
         instance: &str,

@@ -39,13 +39,14 @@ use std::rc::Rc;
 ///         println!(" 0");
 ///     }
 /// }
+/// # use decdnnf_rs::DecisionDNNFReader;
 /// # print_models(&decdnnf_rs::D4Reader::default().read("t 1 0".as_bytes()).unwrap())
 /// ```
 ///
 /// Free variables elusion:
 ///
 /// ```
-/// use decdnnf_rs::{D4Reader, Literal, ModelEnumerator};
+/// use decdnnf_rs::{D4Reader, DecisionDNNFReader, Literal, ModelEnumerator};
 ///
 /// // A Decision-DNNF with two models: -1 2 and 1 2
 /// let ddnnf = D4Reader::default().read(r"
@@ -465,7 +466,7 @@ impl<'a> ModelEnumerator<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{D4Reader, ModelCounter};
+    use crate::{D4Reader, DecisionDNNFReader, ModelCounter};
 
     fn assert_models_eq(
         str_ddnnf: &str,

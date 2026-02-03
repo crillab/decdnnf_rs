@@ -21,6 +21,11 @@ pub use core::NodeIndex;
 pub use core::OrFreeVariables;
 
 mod io;
+pub use io::BinaryReader;
+pub use io::BinaryWriter;
 pub use io::C2dWriter;
 pub use io::D4Reader;
 pub use io::D4Writer;
+pub use io::DecisionDNNFReader;
+pub use io::DecisionDNNFWriter;
+pub use io::SmartReader;

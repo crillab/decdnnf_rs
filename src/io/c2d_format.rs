@@ -1,6 +1,6 @@
 use crate::{
     core::{EdgeIndex, Literal, Node, NodeIndex},
-    DecisionDNNF,
+    DecisionDNNF, DecisionDNNFWriter,
 };
 use anyhow::{anyhow, Context, Result};
 use rustc_hash::FxHashMap;
@@ -8,18 +8,14 @@ use std::io::BufWriter;
 pub use std::io::Write;
 
 /// A structure used to write a Decision-DNNF in the [c2d](http://reasoning.cs.ucla.edu/c2d/) output format.
+#[derive(Default)]
 pub struct Writer;
 
-impl Writer {
-    /// Writes a Decision-DNNF in the c2d format.
-    ///
-    /// # Errors
-    ///
-    /// An error is raised when an I/O exception occurs.
-    pub fn write<W>(mut writer: W, ddnnf: &DecisionDNNF) -> Result<()>
-    where
-        W: Write,
-    {
+impl<W> DecisionDNNFWriter<W> for Writer
+where
+    W: Write,
+{
+    fn write(&self, mut writer: W, ddnnf: &DecisionDNNF) -> Result<()> {
         let mut buf = Vec::new();
         let bufwriter = BufWriter::new(&mut buf);
         let mut writer_data = C2DFormatWriterData::new(bufwriter, ddnnf);
@@ -35,7 +31,9 @@ impl Writer {
         write!(writer, "{}", std::str::from_utf8(&buf)?)
             .context("while writing the buffered content")
     }
+}
 
+impl Writer {
     fn write_from<W>(
         writer_data: &mut C2DFormatWriterData<W>,
         node_index: NodeIndex,
@@ -61,7 +59,7 @@ impl Writer {
                 }
             }
             _ => {}
-        };
+        }
         let write_propagations = |w_data: &mut C2DFormatWriterData<W>, propagations: &[Literal]| {
             propagations
                 .iter()
@@ -308,12 +306,12 @@ fn write_opt_bool(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::D4Reader;
+    use crate::{D4Reader, DecisionDNNFReader};
 
     fn assert_translation(init: &str, expected: &str) {
         let ddnnf = D4Reader::default().read(&mut init.as_bytes()).unwrap();
         let mut buffer = Vec::new();
-        Writer::write(&mut buffer, &ddnnf).unwrap();
+        Writer.write(&mut buffer, &ddnnf).unwrap();
         let actual = String::from_utf8(buffer).unwrap();
         assert_eq!(expected, actual);
     }

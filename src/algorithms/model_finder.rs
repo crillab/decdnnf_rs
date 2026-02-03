@@ -13,6 +13,7 @@ use crate::{
 /// ```
 /// use decdnnf_rs::{Literal, ModelFinder};
 ///
+/// # use decdnnf_rs::DecisionDNNFReader;
 /// # fn gimme_ddnnf() -> decdnnf_rs::DecisionDNNF {let mut r = decdnnf_rs::D4Reader::default().read("t 1 0".as_bytes()).unwrap(); r.update_n_vars(1); r}
 /// let ddnnf = gimme_ddnnf();
 /// let model_finder = ModelFinder::new(&ddnnf);
@@ -186,7 +187,7 @@ fn is_compatible_with_assumptions(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::D4Reader;
+    use crate::{D4Reader, DecisionDNNFReader};
 
     fn get_model(
         str_ddnnf: &str,

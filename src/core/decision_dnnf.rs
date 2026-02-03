@@ -58,6 +58,14 @@ impl Literal {
     pub fn set_negative(&mut self) {
         self.0 |= 1;
     }
+
+    pub(crate) fn into_usize(self) -> usize {
+        self.0
+    }
+
+    pub(crate) fn from_usize(n: usize) -> Self {
+        Self(n)
+    }
 }
 
 impl From<isize> for Literal {

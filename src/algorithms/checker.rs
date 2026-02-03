@@ -17,7 +17,7 @@ use crate::{
 /// # Example
 ///
 /// ```
-/// use decdnnf_rs::{DecisionDNNF, DecisionDNNFChecker};
+/// use decdnnf_rs::{DecisionDNNF, DecisionDNNFChecker, DecisionDNNFReader};
 ///
 /// fn check_decision_dnnf(ddnnf: &DecisionDNNF) {
 ///     let checking_result = DecisionDNNFChecker::check(&ddnnf);
@@ -189,7 +189,7 @@ impl DecisionDNNFChecker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::D4Reader;
+    use crate::{D4Reader, DecisionDNNFReader};
 
     fn read_correct_ddnnf(str_ddnnf: &str) -> DecisionDNNF {
         D4Reader::default().read(&mut str_ddnnf.as_bytes()).unwrap()

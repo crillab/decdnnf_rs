@@ -1,6 +1,5 @@
 use super::{cli_manager, common};
 use clap::{App, AppSettings, ArgMatches, SubCommand};
-use decdnnf_rs::C2dWriter;
 
 #[derive(Default)]
 pub struct Command;
@@ -18,11 +17,14 @@ impl<'a> super::command::Command<'a> for Command {
             .setting(AppSettings::DisableVersion)
             .args(&common::args_input())
             .arg(cli_manager::logging_level_cli_arg())
+            .args(&common::args_output())
     }
 
     fn execute(&self, arg_matches: &ArgMatches<'_>) -> anyhow::Result<()> {
         let ddnnf = common::read_input_ddnnf(arg_matches)?;
-        C2dWriter::write(&mut std::io::stdout(), &ddnnf)?;
+        let mut file_writer = common::create_output_file_writer(arg_matches)?;
+        let formula_writer = common::create_output_formula_writer(arg_matches);
+        formula_writer.write(&mut file_writer, &ddnnf)?;
         Ok(())
     }
 }

@@ -211,7 +211,7 @@ impl OrFreeVariables {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::D4Reader;
+    use crate::{D4Reader, DecisionDNNFReader};
 
     #[test]
     fn test_ok() {

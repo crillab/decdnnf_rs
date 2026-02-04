@@ -49,7 +49,9 @@ impl InvolvedVars {
     }
 
     pub fn set_literals(&mut self, literals: &[Literal]) {
-        literals.iter().for_each(|l| self.set_literal(*l));
+        for l in literals {
+            self.set_literal(*l);
+        }
     }
 
     pub fn iter_missing_literals(&self) -> impl Iterator<Item = Literal> + '_ {

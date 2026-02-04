@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-02-04
+
+### Added
+
+- Added literals assumptions for model counting and model enumeration
+- Added a writer for the d4 format
+- Added a binary format (reader and writer)
+
+### Changed
+
+- Opened more functions to public API
+- Improved documentation
+- Improved code quality
+
 ## [1.0.0] - 2025-09-01
 
 ### Added

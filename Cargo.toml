@@ -2,7 +2,7 @@
 name = "decdnnf_rs"
 authors = ["Jean-Marie Lagniez <lagniez@cril.fr>", "Emmanuel Lonca <lonca@cril.fr>"]
 license = "GPL-3.0-or-later"
-version = "1.0.0"
+version = "1.1.0"
 description = "A library for Decision-DNNFs."
 categories = ["command-line-utilities", "science"]
 keywords = ["decision", "DNNF", "model", "counting", "enumeration"]

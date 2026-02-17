@@ -48,7 +48,7 @@ impl<'a> OrderedDirectAccessEngine<'a> {
     #[must_use]
     #[allow(clippy::missing_panics_doc)]
     pub fn model(&self, mut n: Integer) -> Option<Vec<Literal>> {
-        if n > self.global_n_models {
+        if n >= self.global_n_models {
             return None;
         }
         let n_vars = self.ddnnf.n_vars();
@@ -58,7 +58,7 @@ impl<'a> OrderedDirectAccessEngine<'a> {
             model.push(self.order[model.len()]);
             model_counter.set_assumptions(Rc::new(Assumptions::new(n_vars, model.clone())));
             let current_n_models = model_counter.global_count();
-            if &n > current_n_models {
+            if &n >= current_n_models {
                 let popped = model.pop().unwrap();
                 model.push(popped.flip());
                 n -= current_n_models;
@@ -168,6 +168,19 @@ mod tests {
         let mut ddnnf = D4Reader::default().read("t 1 0".as_bytes()).unwrap();
         ddnnf.update_n_vars(1);
         let engine = OrderedDirectAccessEngine::new(&ddnnf, vec![Literal::from(1)]).unwrap();
-        assert!(engine.model(Integer::from(3)).is_none());
+        assert!(engine.model(Integer::from(2)).is_none());
+    }
+
+    #[test]
+    fn test_lexico() {
+        let mut ddnnf = D4Reader::default().read("t 1 0".as_bytes()).unwrap();
+        ddnnf.update_n_vars(1);
+        let engine = OrderedDirectAccessEngine::new(&ddnnf, vec![Literal::from(-1)]).unwrap();
+        assert_eq!(
+            Some(vec![Literal::from(-1)]),
+            engine.model(Integer::from(0))
+        );
+        assert_eq!(Some(vec![Literal::from(1)]), engine.model(Integer::from(1)));
+        assert_eq!(None, engine.model(Integer::from(2)));
     }
 }

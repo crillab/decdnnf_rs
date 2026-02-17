@@ -466,7 +466,7 @@ mod tests {
         ddnnf.update_n_vars(1);
         let counter = ModelCounter::new(&ddnnf, false);
         let engine = DirectAccessEngine::new(&counter);
-        assert!(engine.model(Integer::from(3)).is_none());
-        assert!(engine.model_with_graph(Integer::from(3)).is_none());
+        assert!(engine.model(Integer::from(2)).is_none());
+        assert!(engine.model_with_graph(Integer::from(2)).is_none());
     }
 }

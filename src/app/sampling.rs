@@ -89,8 +89,8 @@ impl<'a> super::command::Command<'a> for Command {
             bound -= 1;
             let last_value = swapped.get(&bound).unwrap_or(&bound).to_owned();
             let rand_value = swapped
-                .insert(rand_index, last_value)
-                .unwrap_or_else(|| Integer::from(bound.random_below_ref(&mut rand)));
+                .insert(rand_index.clone(), last_value)
+                .unwrap_or(rand_index);
             let model = engine(rand_value);
             model_writer.write_model_ordered(&model);
             counter += 1;

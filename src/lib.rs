@@ -6,6 +6,7 @@ pub use algorithms::DirectAccessEngine;
 pub use algorithms::ModelCounter;
 pub use algorithms::ModelEnumerator;
 pub use algorithms::ModelFinder;
+pub use algorithms::ModelSampler;
 pub use algorithms::OrderedDirectAccessEngine;
 pub use algorithms::OrphanFinder;
 

@@ -2,10 +2,9 @@ use super::{cli_manager, common};
 use crate::app::model_writer::ModelWriter;
 use anyhow::Context;
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
-use decdnnf_rs::ModelCounter;
+use decdnnf_rs::{ModelCounter, ModelSampler};
 use log::info;
 use rug::{rand::RandState, Integer};
-use rustc_hash::FxHashMap;
 use std::str::FromStr;
 
 #[derive(Default)]
@@ -61,39 +60,29 @@ impl<'a> super::command::Command<'a> for Command {
             Integer::from(usize::MAX).random_below(&mut rand)
         };
         info!("random seed is {seed}");
-        rand.seed(&seed);
         let ddnnf = common::read_input_ddnnf(arg_matches)?;
         let model_counter = ModelCounter::new(&ddnnf, false);
         let n_models = model_counter.global_count();
         info!("formula has {n_models} models");
-        let mut n_samples = model_counter.global_count().clone();
-        if let Some(str_n) = arg_matches.value_of(ARG_LIMIT) {
-            let n = Integer::from_str(str_n)
-                .context("while parsing the maximal number of models to print")?;
-            if n_samples > n {
-                n_samples = n;
-            }
+        let n_samples = if let Some(str_n) = arg_matches.value_of(ARG_LIMIT) {
+            Integer::from_str(str_n)
+                .context("while parsing the maximal number of models to print")?
+        } else {
+            Integer::from(n_models)
+        };
+        let mut sampler = ModelSampler::new(&model_counter, n_samples);
+        info!("sampling {} samples", sampler.n_samples_remaining());
+        sampler.set_seed(&seed);
+        if arg_matches.is_present(super::direct_access::ARG_LEXICOGRAPHIC_ORDER) {
+            sampler.set_lexicographic_order();
         }
-        info!("sampling {n_samples} samples");
-        let engine = super::direct_access::direct_access_engine(arg_matches, &model_counter);
-        let mut counter = Integer::ZERO;
-        let mut swapped: FxHashMap<Integer, Integer> = FxHashMap::default();
         let mut model_writer = ModelWriter::new_locked(
             ddnnf.n_vars(),
             false,
             arg_matches.is_present(ARG_DO_NOT_PRINT),
         );
-        while counter < n_samples {
-            let mut bound = Integer::from(n_models - &counter);
-            let rand_index = Integer::from(bound.random_below_ref(&mut rand));
-            bound -= 1;
-            let last_value = swapped.get(&bound).unwrap_or(&bound).to_owned();
-            let rand_value = swapped
-                .insert(rand_index.clone(), last_value)
-                .unwrap_or(rand_index);
-            let model = engine(rand_value);
+        while let Some(model) = sampler.compute_next_model() {
             model_writer.write_model_ordered(&model);
-            counter += 1;
         }
         model_writer.finalize();
         Ok(())

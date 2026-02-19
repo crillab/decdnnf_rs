@@ -38,6 +38,22 @@ impl Assumptions {
     pub fn as_slice(&self) -> &[Literal] {
         &self.literals
     }
+
+    /// Builds the union of two sets of assumptions into the current.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if the two sets define an assumption on the same variable with opposite polarities.
+    pub fn union(&mut self, other: &Self) {
+        for a in &other.literals {
+            assert_ne!(
+                self.mapping[a.var_index()],
+                Some(!a.polarity()),
+                "conflicting assumptions"
+            );
+            self.mapping[a.var_index()] = Some(a.polarity());
+        }
+    }
 }
 
 impl Index<usize> for Assumptions {

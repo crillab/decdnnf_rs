@@ -49,13 +49,8 @@ impl<'a> ModelCounter<'a> {
     /// Set assumption literals, reducing the number of models.
     ///
     /// The only models to be considered are those that contain all the literals marked as assumptions.
-    /// The set of assumptions must involve each variable at most once.
     ///
     /// If the number of models was counted before calling this method, it is cleared.
-    ///
-    /// # Panics
-    ///
-    /// This function panics if the set of assumptions includes the same variable more than once.
     pub fn set_assumptions(&mut self, assumptions: Rc<Assumptions>) {
         self.assumptions = Some(assumptions);
         self.n_models.take();
@@ -393,5 +388,21 @@ mod tests {
         assert_counts_under_assumptions("t 1 0\n", Some(1), 2, 1, Some(vec![]));
         assert_counts_under_assumptions("t 1 0\n", Some(1), 1, 1, Some(vec![-1]));
         assert_counts_under_assumptions("t 1 0\n", Some(1), 1, 1, Some(vec![1]));
+    }
+
+    #[test]
+    fn test_count_under_assumptions_top_2vars() {
+        let instance = "t 1 0\n";
+        let mut ddnnf = D4Reader::default().read(instance.as_bytes()).unwrap();
+        ddnnf.update_n_vars(2);
+        assert_counts_under_assumptions("t 1 0\n", Some(2), 4, 1, Some(vec![]));
+        assert_counts_under_assumptions("t 1 0\n", Some(2), 2, 1, Some(vec![-1]));
+        assert_counts_under_assumptions("t 1 0\n", Some(2), 2, 1, Some(vec![1]));
+        assert_counts_under_assumptions("t 1 0\n", Some(2), 2, 1, Some(vec![-2]));
+        assert_counts_under_assumptions("t 1 0\n", Some(2), 2, 1, Some(vec![2]));
+        assert_counts_under_assumptions("t 1 0\n", Some(2), 1, 1, Some(vec![-1, -2]));
+        assert_counts_under_assumptions("t 1 0\n", Some(2), 1, 1, Some(vec![-1, 2]));
+        assert_counts_under_assumptions("t 1 0\n", Some(2), 1, 1, Some(vec![1, -2]));
+        assert_counts_under_assumptions("t 1 0\n", Some(2), 1, 1, Some(vec![1, 2]));
     }
 }

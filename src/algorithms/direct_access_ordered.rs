@@ -2,7 +2,7 @@ use super::ModelCounter;
 use crate::{Assumptions, DecisionDNNF, Literal};
 use anyhow::{anyhow, Result};
 use rug::Integer;
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 
 /// An object that, given a complete order on the models of a [`DecisionDNNF`] computed internally, allows the k-th model to be returned.
 ///
@@ -11,8 +11,9 @@ use std::rc::Rc;
 /// The order of the models will be the same for two equivalent formulas, even if their structures differ.
 pub struct OrderedDirectAccessEngine<'a> {
     ddnnf: &'a DecisionDNNF,
-    global_n_models: Integer,
+    global_n_models: RefCell<Option<Integer>>,
     order: Vec<Literal>,
+    assumptions: Option<Rc<Assumptions>>,
 }
 
 impl<'a> OrderedDirectAccessEngine<'a> {
@@ -33,13 +34,20 @@ impl<'a> OrderedDirectAccessEngine<'a> {
         {
             return Err(anyhow!("order must involve all variables exactly once"));
         }
-        let model_counter = ModelCounter::new(ddnnf, false);
-        let global_n_models = Integer::from(model_counter.global_count());
         Ok(Self {
             ddnnf,
-            global_n_models,
+            global_n_models: RefCell::new(None),
             order,
+            assumptions: None,
         })
+    }
+
+    /// Set assumption literals, reducing the number of models.
+    ///
+    /// The only models to be considered are those that contain all the literals marked as assumptions.
+    pub fn set_assumptions(&mut self, assumptions: Rc<Assumptions>) {
+        self.assumptions = Some(assumptions);
+        *self.global_n_models.borrow_mut() = None;
     }
 
     /// Returns the model at the given index.
@@ -48,15 +56,36 @@ impl<'a> OrderedDirectAccessEngine<'a> {
     #[must_use]
     #[allow(clippy::missing_panics_doc)]
     pub fn model(&self, mut n: Integer) -> Option<Vec<Literal>> {
-        if n >= self.global_n_models {
+        if self.global_n_models.borrow().is_none() {
+            let mut model_counter = ModelCounter::new(self.ddnnf, false);
+            if let Some(a) = &self.assumptions {
+                model_counter.set_assumptions(Rc::clone(a));
+            }
+            *self.global_n_models.borrow_mut() = Some(Integer::from(model_counter.global_count()));
+        }
+        if &n >= self.global_n_models.borrow().as_ref().unwrap() {
             return None;
         }
         let n_vars = self.ddnnf.n_vars();
         let mut model = Vec::with_capacity(n_vars);
         let mut model_counter = ModelCounter::new(self.ddnnf, false);
         while model.len() != n_vars {
-            model.push(self.order[model.len()]);
-            model_counter.set_assumptions(Rc::new(Assumptions::new(n_vars, model.clone())));
+            let mut new_lit = self.order[model.len()];
+            if let Some(a) = &self.assumptions {
+                if let Some(p) = a[new_lit.var_index()] {
+                    if new_lit.polarity() != p {
+                        new_lit = new_lit.flip();
+                    }
+                    model.push(new_lit);
+                    continue;
+                }
+            }
+            model.push(new_lit);
+            let mut mc_assumptions = Assumptions::new(n_vars, model.clone());
+            if let Some(a) = &self.assumptions {
+                mc_assumptions.union(a);
+            }
+            model_counter.set_assumptions(Rc::new(mc_assumptions));
             let current_n_models = model_counter.global_count();
             if &n >= current_n_models {
                 let popped = model.pop().unwrap();
@@ -181,6 +210,44 @@ mod tests {
             engine.model(Integer::from(0))
         );
         assert_eq!(Some(vec![Literal::from(1)]), engine.model(Integer::from(1)));
+        assert_eq!(None, engine.model(Integer::from(2)));
+    }
+
+    #[test]
+    fn test_assumptions_first() {
+        let mut ddnnf = D4Reader::default().read("t 1 0".as_bytes()).unwrap();
+        ddnnf.update_n_vars(2);
+        let mut engine =
+            OrderedDirectAccessEngine::new(&ddnnf, vec![Literal::from(-1), Literal::from(-2)])
+                .unwrap();
+        engine.set_assumptions(Rc::new(Assumptions::new(2, vec![Literal::from(1)])));
+        assert_eq!(
+            Some(vec![Literal::from(1), Literal::from(-2)]),
+            engine.model(Integer::from(0))
+        );
+        assert_eq!(
+            Some(vec![Literal::from(1), Literal::from(2)]),
+            engine.model(Integer::from(1))
+        );
+        assert_eq!(None, engine.model(Integer::from(2)));
+    }
+
+    #[test]
+    fn test_assumptions_last() {
+        let mut ddnnf = D4Reader::default().read("t 1 0".as_bytes()).unwrap();
+        ddnnf.update_n_vars(2);
+        let mut engine =
+            OrderedDirectAccessEngine::new(&ddnnf, vec![Literal::from(-1), Literal::from(-2)])
+                .unwrap();
+        engine.set_assumptions(Rc::new(Assumptions::new(2, vec![Literal::from(2)])));
+        assert_eq!(
+            Some(vec![Literal::from(-1), Literal::from(2)]),
+            engine.model(Integer::from(0))
+        );
+        assert_eq!(
+            Some(vec![Literal::from(1), Literal::from(2)]),
+            engine.model(Integer::from(1))
+        );
         assert_eq!(None, engine.model(Integer::from(2)));
     }
 }

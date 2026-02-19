@@ -1,9 +1,6 @@
-use std::str::FromStr;
-
-use crate::app::model_writer::ModelWriter;
-
 use super::cli_manager;
 use super::common;
+use crate::app::model_writer::ModelWriter;
 use anyhow::Context;
 use clap::App;
 use clap::ArgMatches;
@@ -14,6 +11,8 @@ use decdnnf_rs::ModelCounter;
 use decdnnf_rs::OrderedDirectAccessEngine;
 use log::info;
 use rug::Integer;
+use std::rc::Rc;
+use std::str::FromStr;
 
 #[derive(Default)]
 pub struct Command;
@@ -35,6 +34,7 @@ impl<'a> super::command::Command<'a> for Command {
             )
             .setting(AppSettings::DisableVersion)
             .args(&common::args_input())
+            .arg(common::arg_assumptions())
             .arg(cli_manager::logging_level_cli_arg())
             .arg(arg_lexicographic_order())
             .arg(
@@ -52,7 +52,13 @@ impl<'a> super::command::Command<'a> for Command {
         let ddnnf = common::read_input_ddnnf(arg_matches)?;
         let index = Integer::from_str(arg_matches.value_of(ARG_INDEX).unwrap())
             .context("while parsing the model index")?;
-        let model_counter = ModelCounter::new(&ddnnf, false);
+        let mut model_counter = ModelCounter::new(&ddnnf, false);
+        if let Some(a) = common::read_assumptions(&ddnnf, arg_matches)? {
+            info!("user set {} assumptions", a.as_slice().len());
+            model_counter.set_assumptions(Rc::new(a));
+        } else {
+            info!("user set 0 assumptions");
+        }
         let n_models = model_counter.global_count();
         info!("formula has {n_models} models");
         let mut model_writer = ModelWriter::new_locked(ddnnf.n_vars(), false, false);
@@ -79,7 +85,10 @@ pub(crate) fn direct_access_engine<'a>(
         let order = (1..=model_counter.ddnnf().n_vars())
             .map(|i| Literal::from(-isize::try_from(i).unwrap()))
             .collect::<Vec<_>>();
-        let engine = OrderedDirectAccessEngine::new(model_counter.ddnnf(), order).unwrap();
+        let mut engine = OrderedDirectAccessEngine::new(model_counter.ddnnf(), order).unwrap();
+        if let Some(a) = &model_counter.assumptions() {
+            engine.set_assumptions(Rc::clone(a));
+        }
         Box::new(move |i| {
             engine
                 .model(i)

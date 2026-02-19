@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use crate::{DirectAccessEngine, Literal, ModelCounter, OrderedDirectAccessEngine};
 use rug::{rand::RandState, Integer};
 use rustc_hash::FxHashMap;
@@ -50,6 +52,8 @@ pub struct ModelSampler<'a> {
 
 impl<'a> ModelSampler<'a> {
     /// Builds a new model sampler given a model counter and the number of expected samples.
+    ///
+    /// The sampler inherits the assumptions from the model counter.
     ///
     /// The formula for which models are sampled is the one involved in the model counter.
     /// The model counter must be initialized in order to consider full models.
@@ -155,7 +159,10 @@ impl<'a> ModelSampler<'a> {
 
     fn create_direct_access_engine(&self) -> DirectAccessFnType<'a> {
         if let Some(o) = self.order.clone() {
-            let engine = OrderedDirectAccessEngine::new(self.model_counter.ddnnf(), o).unwrap();
+            let mut engine = OrderedDirectAccessEngine::new(self.model_counter.ddnnf(), o).unwrap();
+            if let Some(a) = self.model_counter.assumptions() {
+                engine.set_assumptions(Rc::clone(&a));
+            }
             Box::new(move |i| {
                 engine
                     .model(i)
@@ -174,7 +181,7 @@ impl<'a> ModelSampler<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{D4Reader, DecisionDNNFReader};
+    use crate::{Assumptions, D4Reader, DecisionDNNFReader};
 
     const EXPECTED_TRIVIAL_2VARS: &[&[isize]] = &[&[-1, -2], &[-1, 2], &[1, -2], &[1, 2]];
 
@@ -294,5 +301,55 @@ mod tests {
         let mut sampler = ModelSampler::new(&counter, Integer::from(10));
         let _ = sampler.compute_next_model();
         sampler.set_seed(&Integer::ZERO);
+    }
+
+    #[test]
+    fn test_sample_all_under_assumptions_first() {
+        let mut ddnnf = D4Reader::default().read("t 1 0".as_bytes()).unwrap();
+        ddnnf.update_n_vars(2);
+        let mut counter = ModelCounter::new(&ddnnf, false);
+        counter.set_assumptions(Rc::new(Assumptions::new(2, vec![Literal::from(1)])));
+        let mut sampler = ModelSampler::new(&counter, Integer::from(10));
+        assert_eq!(2, sampler.n_samples_remaining());
+        assert_samples_in(&mut sampler, 2, &[&[1, -2], &[1, 2]]);
+        assert_eq!(0, sampler.n_samples_remaining());
+    }
+
+    #[test]
+    fn test_sample_all_under_assumptions_second() {
+        let mut ddnnf = D4Reader::default().read("t 1 0".as_bytes()).unwrap();
+        ddnnf.update_n_vars(2);
+        let mut counter = ModelCounter::new(&ddnnf, false);
+        counter.set_assumptions(Rc::new(Assumptions::new(2, vec![Literal::from(2)])));
+        let mut sampler = ModelSampler::new(&counter, Integer::from(10));
+        assert_eq!(2, sampler.n_samples_remaining());
+        assert_samples_in(&mut sampler, 2, &[&[-1, 2], &[1, 2]]);
+        assert_eq!(0, sampler.n_samples_remaining());
+    }
+
+    #[test]
+    fn test_sample_all_under_assumptions_lexico_first() {
+        let mut ddnnf = D4Reader::default().read("t 1 0".as_bytes()).unwrap();
+        ddnnf.update_n_vars(2);
+        let mut counter = ModelCounter::new(&ddnnf, false);
+        counter.set_assumptions(Rc::new(Assumptions::new(2, vec![Literal::from(1)])));
+        let mut sampler = ModelSampler::new(&counter, Integer::from(10));
+        sampler.set_lexicographic_order();
+        assert_eq!(2, sampler.n_samples_remaining());
+        assert_samples_in(&mut sampler, 2, &[&[1, -2], &[1, 2]]);
+        assert_eq!(0, sampler.n_samples_remaining());
+    }
+
+    #[test]
+    fn test_sample_all_under_assumptions_lexico_second() {
+        let mut ddnnf = D4Reader::default().read("t 1 0".as_bytes()).unwrap();
+        ddnnf.update_n_vars(2);
+        let mut counter = ModelCounter::new(&ddnnf, false);
+        counter.set_assumptions(Rc::new(Assumptions::new(2, vec![Literal::from(2)])));
+        let mut sampler = ModelSampler::new(&counter, Integer::from(10));
+        sampler.set_lexicographic_order();
+        assert_eq!(2, sampler.n_samples_remaining());
+        assert_samples_in(&mut sampler, 2, &[&[-1, 2], &[1, 2]]);
+        assert_eq!(0, sampler.n_samples_remaining());
     }
 }

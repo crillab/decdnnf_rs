@@ -5,7 +5,11 @@ use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 use decdnnf_rs::{ModelCounter, ModelSampler};
 use log::info;
 use rug::{rand::RandState, Integer};
-use std::str::FromStr;
+use std::{
+    rc::Rc,
+    str::FromStr,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 #[derive(Default)]
 pub struct Command;
@@ -26,6 +30,7 @@ impl<'a> super::command::Command<'a> for Command {
             .about("performs a uniform sampling among the models of the formula")
             .setting(AppSettings::DisableVersion)
             .args(&common::args_input())
+            .arg(common::arg_assumptions())
             .arg(cli_manager::logging_level_cli_arg())
             .arg(super::direct_access::arg_lexicographic_order())
             .arg(
@@ -57,11 +62,20 @@ impl<'a> super::command::Command<'a> for Command {
         let seed = if let Some(str_n) = arg_matches.value_of(ARG_SEED) {
             Integer::from_str(str_n).context("while parsing the random seed")?
         } else {
+            let start = SystemTime::now();
+            let since_the_epoch = start.duration_since(UNIX_EPOCH).unwrap();
+            rand.seed(&Integer::from(since_the_epoch.as_millis()));
             Integer::from(usize::MAX).random_below(&mut rand)
         };
         info!("random seed is {seed}");
         let ddnnf = common::read_input_ddnnf(arg_matches)?;
-        let model_counter = ModelCounter::new(&ddnnf, false);
+        let mut model_counter = ModelCounter::new(&ddnnf, false);
+        if let Some(a) = common::read_assumptions(&ddnnf, arg_matches)? {
+            info!("user set {} assumptions", a.as_slice().len());
+            model_counter.set_assumptions(Rc::new(a));
+        } else {
+            info!("user set 0 assumptions");
+        }
         let n_models = model_counter.global_count();
         info!("formula has {n_models} models");
         let n_samples = if let Some(str_n) = arg_matches.value_of(ARG_LIMIT) {

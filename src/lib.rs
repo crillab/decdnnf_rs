@@ -9,6 +9,7 @@ pub use algorithms::ModelFinder;
 pub use algorithms::ModelSampler;
 pub use algorithms::OrderedDirectAccessEngine;
 pub use algorithms::OrphanFinder;
+pub use algorithms::ParallelModelEnumerator;
 
 mod core;
 pub use core::Assumptions;

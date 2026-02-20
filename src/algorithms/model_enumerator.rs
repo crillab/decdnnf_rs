@@ -1,9 +1,10 @@
 use crate::{
     core::{EdgeIndex, Node, NodeIndex},
-    Assumptions, DecisionDNNF, DirectAccessEngine, Literal, OrFreeVariables,
+    Assumptions, DecisionDNNF, DirectAccessEngine, Literal, ModelCounter, OrFreeVariables,
 };
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use rug::Integer;
-use std::rc::Rc;
+use std::{rc::Rc, sync::Mutex};
 
 /// A structure used to enumerate the models of a [`DecisionDNNF`].
 ///
@@ -130,13 +131,9 @@ impl<'a> ModelEnumerator<'a> {
     /// Set assumption literals, reducing the number of models.
     ///
     /// The only models to be considered are those that contain all the literals marked as assumptions.
-    /// The set of assumptions must involve each variable at most once.
     ///
     /// The enumeration process is [`reset`](Self::reset) by a call to this method.
-    ///
-    /// # Panics
-    ///
-    /// This function panics if the set of assumptions includes the same variable more than once.
+    #[allow(clippy::missing_panics_doc)]
     pub fn set_assumptions(&mut self, assumptions: Rc<Assumptions>) {
         let n_nodes = self.ddnnf.nodes().as_slice().len();
         self.or_edge_indices = vec![0; n_nodes];
@@ -463,6 +460,175 @@ impl<'a> ModelEnumerator<'a> {
     }
 }
 
+const DEFAULT_BATCH_SIZE: usize = 1 << 16;
+
+/// A structure used to enumerate the models of a [`DecisionDNNF`] using multiple threads.
+///
+/// After creating an enumerator with the [`new`](Self::new) function, call [`enumerate`](Self::enumerate).
+/// In order to get result per threads, use [`enumerate_with_data`](Self::enumerate_with_data) instead.
+///
+/// When creating the enumerator, indicate whether you want to elude the free variables.
+/// If you choose not to elude the free variables, the algorithm will perform a traditional enumeration.
+/// The models yielded by [`enumerate`](Self::enumerate) will contain exactly one literal by variable (i.e. no literal will be [`None`]).
+///
+/// If you choose to elude the free variables, then they will be absent from the models (replaced by [`None`]).
+/// In this case, the algorithm won't produce one model for each literal polarity, but rather one model in which the variable is absent.
+/// Eluding free variables results in shorter enumerations since each partial model represents a number of models equal to two to the power of the number of eluded variables.
+/// For more information on this kind of enumeration, see the research paper *[Leveraging Decision-DNNF Compilation for Enumerating Disjoint Partial Models](https://doi.org/10.24963/kr.2024/48))*.
+///
+/// # Examples
+///
+/// Printing models like SAT solvers:
+///
+/// ```
+/// use decdnnf_rs::{DecisionDNNF, Literal, ParallelModelEnumerator};
+///
+/// fn check_models<F>(ddnnf: &DecisionDNNF, checker: F) -> bool
+/// where
+///     F: Fn(&[Option<Literal>]) -> bool,
+///     F: Sync,
+/// {
+///     let mut model_enumerator = ParallelModelEnumerator::new(&ddnnf, false, 2);
+///     let results = model_enumerator.enumerate_with_data(|is_ok, model| {
+///         if checker(model) {
+///             true
+///         } else {
+///             *is_ok = false;
+///             false
+///         }
+///     }, || true);
+///     results.iter().all(|r| *r)
+/// }
+/// # use decdnnf_rs::DecisionDNNFReader;
+/// # check_models(&decdnnf_rs::D4Reader::default().read("t 1 0".as_bytes()).unwrap(), |_| true);
+/// ```
+pub struct ParallelModelEnumerator<'a> {
+    ddnnf: &'a DecisionDNNF,
+    elude_free_vars: bool,
+    n_threads: usize,
+    assumptions: Option<Rc<Assumptions>>,
+    batch_size: usize,
+}
+
+impl<'a> ParallelModelEnumerator<'a> {
+    /// Builds a new model enumerator for a [`DecisionDNNF`].
+    ///
+    /// The second parameter specifies whether free variables should be excluded from models.
+    /// See the top-level [`ModelEnumerator`] documentation for more information about free variable elusion.
+    ///
+    /// The number of threads must be greater than zero.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if the number of threads is set to zero.
+    pub fn new(ddnnf: &'a DecisionDNNF, elude_free_vars: bool, n_threads: usize) -> Self {
+        assert!(n_threads > 0, "number of threads must be higher than zero");
+        Self {
+            ddnnf,
+            elude_free_vars,
+            n_threads,
+            assumptions: None,
+            batch_size: DEFAULT_BATCH_SIZE,
+        }
+    }
+
+    /// Set assumption literals, reducing the number of models.
+    ///
+    /// The only models to be considered are those that contain all the literals marked as assumptions.
+    pub fn set_assumptions(&mut self, assumptions: Rc<Assumptions>) {
+        self.assumptions = Some(assumptions);
+    }
+
+    /// Launch the enumeration, calling the callback method for each model.
+    ///
+    /// The callback method returns a Boolean indicating if the search should continue.
+    /// In case a callback returns `false`, the search will stop as soon as possible.
+    /// However, some other models may be yielded before the enumeration stops.
+    /// It is important in this case that the callback continues to return `false`.
+    #[allow(clippy::missing_panics_doc)]
+    pub fn enumerate<F>(&self, mut callback: F)
+    where
+        F: FnMut(&[Option<Literal>]) -> bool,
+        F: Clone + Send + Sync,
+    {
+        self.enumerate_with_data(move |(), m| (callback)(m), || ());
+    }
+
+    /// Launch the enumeration, calling the callback method for each model.
+    ///
+    /// Comparing to [`enumerate`](Self::enumerate), this function allows to initialize a structure per thread used to track the enumeration on a thread basis.
+    /// This structure is passed to the callback along with the model.
+    /// This function returns the structures of all threads.
+    ///
+    /// The callback method returns a Boolean indicating if the search should continue.
+    /// In case a callback returns `false`, the search will stop as soon as possible.
+    /// However, some other models may be yielded before the enumeration stops.
+    /// It is important in this case that the callback continues to return `false`.
+    #[allow(clippy::missing_panics_doc)]
+    pub fn enumerate_with_data<D, F, G>(&self, callback: F, callback_data_init: G) -> Vec<D>
+    where
+        D: Send + Sync,
+        F: FnMut(&mut D, &[Option<Literal>]) -> bool,
+        F: Clone + Send + Sync,
+        G: Fn() -> D,
+        G: Send + Sync,
+    {
+        let next_min_bound = Mutex::new(Integer::ZERO);
+        let cloned_assumptions = self.assumptions.as_ref().map(|rc| (**rc).clone());
+        let ddnnf = self.ddnnf;
+        let elude_free_vars = self.elude_free_vars;
+        let batch_size = self.batch_size;
+        (0..self.n_threads)
+            .into_par_iter()
+            .map_with(callback, |cb, _| {
+                let mut data = callback_data_init();
+                let mut model_counter = ModelCounter::new(ddnnf, elude_free_vars);
+                let thread_local_assumptions = cloned_assumptions.clone();
+                if let Some(a) = thread_local_assumptions {
+                    model_counter.set_assumptions(Rc::new(a));
+                }
+                let n_models = model_counter.global_count();
+                let mut model_iterator = ModelEnumerator::new(ddnnf, elude_free_vars);
+                if let Some(a) = model_counter.assumptions().as_ref() {
+                    model_iterator.set_assumptions(Rc::clone(a));
+                }
+                let direct_access_engine = DirectAccessEngine::new(&model_counter);
+                loop {
+                    let mut lock = next_min_bound.lock().unwrap();
+                    let mut min_bound = lock.clone();
+                    if &min_bound == n_models {
+                        std::mem::drop(lock);
+                        break;
+                    }
+                    let mut next_min_bound = Integer::from(&min_bound + batch_size);
+                    if &next_min_bound > n_models {
+                        next_min_bound.clone_from(n_models);
+                    }
+                    lock.clone_from(&next_min_bound);
+                    std::mem::drop(lock);
+                    let mut model = model_iterator
+                        .jump_to(&direct_access_engine, min_bound.clone())
+                        .unwrap();
+                    let should_continue = loop {
+                        if !cb(&mut data, model) {
+                            break false;
+                        }
+                        min_bound += 1;
+                        if min_bound == next_min_bound {
+                            break true;
+                        }
+                        model = model_iterator.compute_next_model().unwrap();
+                    };
+                    if !should_continue {
+                        break;
+                    }
+                }
+                data
+            })
+            .collect()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -783,5 +949,67 @@ mod tests {
         let ddnnf = D4Reader::default().read("f 1 0".as_bytes()).unwrap();
         let mut enumerator = ModelEnumerator::new(&ddnnf, false);
         assert!(enumerator.compute_next_model().is_none());
+    }
+
+    #[test]
+    fn test_mt() {
+        let mut ddnnf = D4Reader::default().read("t 1 0".as_bytes()).unwrap();
+        ddnnf.update_n_vars(3);
+        let mut enumerator = ParallelModelEnumerator::new(&ddnnf, false, 2);
+        enumerator.batch_size = 1;
+        let count = Mutex::new(0_usize);
+        enumerator.enumerate(|_| {
+            let mut lock = count.lock().unwrap();
+            *lock += 1;
+            true
+        });
+        assert_eq!(8, *count.lock().unwrap());
+    }
+
+    #[test]
+    fn test_mt_compact() {
+        let mut ddnnf = D4Reader::default().read("t 1 0".as_bytes()).unwrap();
+        ddnnf.update_n_vars(3);
+        let mut enumerator = ParallelModelEnumerator::new(&ddnnf, true, 2);
+        enumerator.batch_size = 1;
+        let count = Mutex::new(0_usize);
+        enumerator.enumerate(|_| {
+            let mut lock = count.lock().unwrap();
+            *lock += 1;
+            true
+        });
+        assert_eq!(1, *count.lock().unwrap());
+    }
+
+    #[test]
+    fn test_mt_under_assumptions() {
+        let mut ddnnf = D4Reader::default().read("t 1 0".as_bytes()).unwrap();
+        ddnnf.update_n_vars(3);
+        let mut enumerator = ParallelModelEnumerator::new(&ddnnf, false, 2);
+        enumerator.set_assumptions(Rc::new(Assumptions::new(3, vec![Literal::from(-1)])));
+        enumerator.batch_size = 1;
+        let count = Mutex::new(0_usize);
+        enumerator.enumerate(|_| {
+            let mut lock = count.lock().unwrap();
+            *lock += 1;
+            true
+        });
+        assert_eq!(4, *count.lock().unwrap());
+    }
+
+    #[test]
+    fn test_mt_stop() {
+        let mut ddnnf = D4Reader::default().read("t 1 0".as_bytes()).unwrap();
+        ddnnf.update_n_vars(3);
+        let mut enumerator = ParallelModelEnumerator::new(&ddnnf, false, 1);
+        enumerator.set_assumptions(Rc::new(Assumptions::new(3, vec![Literal::from(-1)])));
+        enumerator.batch_size = 1;
+        let count = Mutex::new(0_usize);
+        enumerator.enumerate(|_| {
+            let mut lock = count.lock().unwrap();
+            *lock += 1;
+            false
+        });
+        assert_eq!(1, *count.lock().unwrap());
     }
 }

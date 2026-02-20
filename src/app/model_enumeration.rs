@@ -1,11 +1,13 @@
 use super::{cli_manager, common, model_writer::ModelWriter};
 use anyhow::{anyhow, Context};
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
-use decdnnf_rs::{DirectAccessEngine, Literal, ModelCounter, ModelEnumerator, ModelFinder};
+use decdnnf_rs::{Literal, ModelEnumerator, ModelFinder, ParallelModelEnumerator};
 use log::info;
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use rug::Integer;
-use std::{io::Write, rc::Rc, sync::Mutex};
+use std::{
+    io::{Stdout, Write},
+    rc::Rc,
+};
 
 #[derive(Default)]
 pub struct Command;
@@ -16,8 +18,6 @@ const ARG_COMPACT_FREE_VARS: &str = "ARG_COMPACT_FREE_VARS";
 const ARG_DECISION_TREE: &str = "ARG_DECISION_TREE";
 const ARG_DO_NOT_PRINT: &str = "ARG_DO_NOT_PRINT";
 const ARG_THREADS: &str = "ARG_THREADS";
-
-const MT_BATCH_SIZE: usize = 1 << 16;
 
 impl<'a> super::command::Command<'a> for Command {
     fn name(&self) -> &str {
@@ -110,62 +110,34 @@ fn enum_default_parallel(arg_matches: &ArgMatches<'_>) -> anyhow::Result<()> {
     });
     common::log_time_for_step("model enumeration", || {
         let compact_display = arg_matches.is_present(ARG_COMPACT_FREE_VARS);
-        let next_min_bound = Mutex::new(Integer::ZERO);
-        let writers_n_enumerated = Mutex::new(Integer::ZERO);
-        let writers_n_models = Mutex::new(Integer::ZERO);
         let n_threads = str::parse::<usize>(arg_matches.value_of(ARG_THREADS).unwrap())
             .context("while parsing the number of threads provided on the command line")?;
         info!("parallel enumeration using {n_threads} threads");
-        (0..n_threads).into_par_iter().for_each(|_| {
-            let mut model_counter = ModelCounter::new(&ddnnf, compact_display);
-            let thread_local_assumptions = assumptions.as_ref().map(|a| Rc::new(a.clone()));
-            if let Some(a) = thread_local_assumptions.as_ref() {
-                model_counter.set_assumptions(Rc::clone(a));
-            }
-            let n_models = model_counter.global_count();
-            let mut model_writer = ModelWriter::new_unlocked(
-                ddnnf.n_vars(),
-                compact_display,
-                arg_matches.is_present(ARG_DO_NOT_PRINT),
-            );
-            let mut model_iterator = ModelEnumerator::new(&ddnnf, compact_display);
-            if let Some(a) = thread_local_assumptions.as_ref() {
-                model_iterator.set_assumptions(Rc::clone(a));
-            }
-            let direct_access_engine = DirectAccessEngine::new(&model_counter);
-            loop {
-                let mut lock = next_min_bound.lock().unwrap();
-                let mut min_bound = lock.clone();
-                if &min_bound == n_models {
-                    std::mem::drop(lock);
-                    break;
-                }
-                let mut next_min_bound = Integer::from(&min_bound + MT_BATCH_SIZE);
-                if &next_min_bound > n_models {
-                    next_min_bound.clone_from(n_models);
-                }
-                lock.clone_from(&next_min_bound);
-                std::mem::drop(lock);
-                let mut model = model_iterator
-                    .jump_to(&direct_access_engine, min_bound.clone())
-                    .unwrap();
-                loop {
-                    model_writer.write_model_ordered(model);
-                    min_bound += 1;
-                    if min_bound == next_min_bound {
-                        break;
-                    }
-                    model = model_iterator.compute_next_model().unwrap();
-                }
-            }
-            model_writer.finalize();
-            *writers_n_enumerated.lock().unwrap() += model_writer.n_enumerated();
-            *writers_n_models.lock().unwrap() += model_writer.n_models();
-        });
+
+        let mut enumerator = ParallelModelEnumerator::new(&ddnnf, compact_display, n_threads);
+        if let Some(a) = assumptions {
+            enumerator.set_assumptions(Rc::new(a));
+        }
+        let mut writers = enumerator.enumerate_with_data(
+            |writer: &mut ModelWriter<Stdout>, model| {
+                writer.write_model_ordered(model);
+                true
+            },
+            || {
+                ModelWriter::new_unlocked(
+                    ddnnf.n_vars(),
+                    compact_display,
+                    arg_matches.is_present(ARG_DO_NOT_PRINT),
+                )
+            },
+        );
+        for w in &mut writers {
+            w.finalize();
+        }
         write_summary_for(
             compact_display,
-            &writers_n_enumerated.lock().unwrap(),
-            &writers_n_models.lock().unwrap(),
+            &writers.iter().map(ModelWriter::n_enumerated).sum(),
+            &writers.iter().map(ModelWriter::n_models).sum(),
         );
         Ok(())
     })

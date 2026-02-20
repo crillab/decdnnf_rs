@@ -12,6 +12,7 @@ pub use direct_access_ordered::OrderedDirectAccessEngine;
 
 mod model_enumerator;
 pub use model_enumerator::ModelEnumerator;
+pub use model_enumerator::ParallelModelEnumerator;
 
 mod model_finder;
 pub use model_finder::ModelFinder;

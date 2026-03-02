@@ -539,6 +539,12 @@ impl<'a> ParallelModelEnumerator<'a> {
         self.assumptions = Some(assumptions);
     }
 
+    /// Sets the batch size for each threads.
+    pub fn set_batch_size(&mut self, batch_size: usize) {
+        assert!(batch_size > 0);
+        self.batch_size = batch_size;
+    }
+
     /// Launch the enumeration, calling the callback method for each model.
     ///
     /// The callback method returns a Boolean indicating if the search should continue.

@@ -1,6 +1,9 @@
 mod assumptions;
 pub use assumptions::Assumptions;
 
+mod cnf;
+pub use cnf::CNFFormula;
+
 mod decision_dnnf;
 pub use decision_dnnf::DecisionDNNF;
 pub use decision_dnnf::Edge;
@@ -8,6 +11,7 @@ pub use decision_dnnf::EdgeIndex;
 pub use decision_dnnf::Literal;
 pub use decision_dnnf::Node;
 pub use decision_dnnf::NodeIndex;
+pub(crate) use decision_dnnf::SubformulaReusableDS;
 
 mod free_variables;
 pub use free_variables::FreeVariables;

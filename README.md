@@ -135,6 +135,14 @@ decdnnf_rs sampling -l 5 -i instance.nnf
 
 The indices associated with these models function similarly to those for direct access and include the `--lexicographic-order` flag.
 
+## Reduction w.r.t. equivalences
+
+Use the `reduce-formula` command with an input Decision-DNNF and an equivalent DIMACS-formatted CNF formula:
+
+```bash
+decdnnf_rs reduce-formula -i instance.nnf -c instance.cnf
+```
+
 ## License
 
 Decdnnf-rs is developed at CRIL (Univ. Artois & CNRS).
@@ -145,3 +153,9 @@ It is made available under the terms of the GNU GPLv3 license.
 Parts of this work has benefited from the support of the AI Chair EXPEKCTATION (ANR-19-CHIA-0005-01) of the French National Research Agency,
 including the research papers *[Leveraging Decision-DNNF Compilation for Enumerating Disjoint Partial Models](https://doi.org/10.24963/kr.2024/48)*
 and *[Enhancing Query Efficiency for D-DNNF Representations Through Preprocessing](https://doi.org/10.1007/978-3-032-04590-4_9)*.
+
+Parts of this work has benefited from the support of the CERADOC project (ANR-25-CE23-3078) of the French National Research Agency,
+including the research papers *[Efficient Minimization of Decision-DNNF Circuits via Semantic Hashing and Provenance Tracking](IJCAI-ECAI 2026, to appear)*
+and *[decdnnf_rs: A framework for Querying d-DNNF](SAT 2026, to appear)*.
+
+Please use the SAT 2026 reference to cite decdnnf_rs.

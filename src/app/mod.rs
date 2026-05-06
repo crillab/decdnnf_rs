@@ -9,6 +9,9 @@ mod common;
 mod direct_access;
 pub(crate) use direct_access::Command as DirectAccessCommand;
 
+mod formula_reducer;
+pub(crate) use formula_reducer::Command as FormulaReducerCommand;
+
 mod model_computer;
 pub(crate) use model_computer::Command as ModelComputerCommand;
 

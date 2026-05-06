@@ -540,6 +540,10 @@ impl<'a> ParallelModelEnumerator<'a> {
     }
 
     /// Sets the batch size for each threads.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if the batch size is equal to 0.
     pub fn set_batch_size(&mut self, batch_size: usize) {
         assert!(batch_size > 0);
         self.batch_size = batch_size;

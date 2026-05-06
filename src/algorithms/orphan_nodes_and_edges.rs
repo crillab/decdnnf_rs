@@ -101,40 +101,69 @@ impl OrphanFinder {
         if self.orphan_nodes.is_empty() && self.orphan_edges.is_empty() {
             return;
         }
-        for orphan_node in self.orphan_nodes.iter().rev() {
-            ddnnf.nodes_mut().as_mut().remove(usize::from(*orphan_node));
-        }
-        for orphan_edge in self.orphan_edges.iter().rev() {
-            ddnnf.edges_mut().as_mut().remove(usize::from(*orphan_edge));
-        }
+        let new_node_indices = Self::new_indices_with_offset(ddnnf.n_nodes(), &self.orphan_nodes);
+        let new_edge_indices = Self::new_indices_with_offset(ddnnf.n_edges(), &self.orphan_edges);
+        let mut new_nodes =
+            Self::remove_sorted_indices(ddnnf.nodes().as_slice(), self.orphans_nodes());
+        std::mem::swap(ddnnf.nodes_mut().as_mut(), &mut new_nodes);
+        let mut new_edges =
+            Self::remove_sorted_indices(ddnnf.edges().as_slice(), self.orphans_edges());
+        std::mem::swap(ddnnf.edges_mut().as_mut(), &mut new_edges);
         for node in ddnnf.nodes_mut().as_mut_slice() {
             match node {
                 Node::And(items) | Node::Or(items) => {
                     for edge_index in items {
-                        *edge_index = Self::new_index_with_offset(*edge_index, &self.orphan_edges);
+                        *edge_index = new_edge_indices[usize::from(*edge_index)];
                     }
                 }
                 Node::True | Node::False => {}
             }
         }
         for edge in ddnnf.edges_mut().as_mut_slice() {
-            edge.set_target(Self::new_index_with_offset(
-                edge.target(),
-                &self.orphan_nodes,
-            ));
+            edge.set_target(new_node_indices[usize::from(edge.target())]);
         }
     }
 
-    fn new_index_with_offset<T>(index: T, orphans: &[T]) -> T
+    fn remove_sorted_indices<T, U>(items: &[T], to_remove: &[U]) -> Vec<T>
     where
-        T: Copy + PartialOrd + From<usize>,
+        T: Clone,
+        U: Copy,
+        usize: From<U>,
+    {
+        if to_remove.is_empty() {
+            return items.to_vec();
+        }
+        let mut new_vec = Vec::with_capacity(items.len());
+        new_vec.append(&mut items[0..usize::from(to_remove[0])].to_vec());
+        for (i, n) in to_remove.iter().enumerate() {
+            let min_bound = usize::from(*n) + 1;
+            if min_bound == items.len() {
+                break;
+            }
+            let max_bound = if i == to_remove.len() - 1 {
+                items.len()
+            } else {
+                usize::from(to_remove[i + 1])
+            };
+            new_vec.append(&mut items[min_bound..max_bound].to_vec());
+        }
+        new_vec
+    }
+
+    fn new_indices_with_offset<T>(len: usize, orphans: &[T]) -> Vec<T>
+    where
+        T: Copy + PartialOrd + From<usize> + std::fmt::Debug,
         usize: From<T>,
     {
-        let offset = orphans
-            .iter()
-            .position(|other| *other > index)
-            .unwrap_or(orphans.len());
-        T::from(usize::from(index) - offset)
+        let mut new_indices = vec![];
+        let mut current_offset = 0;
+        for i in 0..len {
+            new_indices.push(T::from(i - current_offset));
+            if current_offset < orphans.len() && orphans[current_offset] == i.into() {
+                current_offset += 1;
+            }
+        }
+        new_indices
     }
 }
 

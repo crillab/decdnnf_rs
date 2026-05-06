@@ -3,6 +3,7 @@
 mod algorithms;
 pub use algorithms::DecisionDNNFChecker;
 pub use algorithms::DirectAccessEngine;
+pub use algorithms::EquivalentNodesMerging;
 pub use algorithms::ModelCounter;
 pub use algorithms::ModelEnumerator;
 pub use algorithms::ModelFinder;
@@ -13,6 +14,7 @@ pub use algorithms::ParallelModelEnumerator;
 
 mod core;
 pub use core::Assumptions;
+pub use core::CNFFormula;
 pub use core::DecisionDNNF;
 pub use core::Edge;
 pub use core::EdgeIndex;
@@ -30,4 +32,5 @@ pub use io::D4Reader;
 pub use io::D4Writer;
 pub use io::DecisionDNNFReader;
 pub use io::DecisionDNNFWriter;
+pub use io::DimacsCNFReader;
 pub use io::SmartReader;

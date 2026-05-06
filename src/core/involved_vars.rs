@@ -88,6 +88,10 @@ impl InvolvedVars {
             })
             .flatten()
     }
+
+    pub(crate) fn data(&self) -> &[IntType] {
+        &self.data
+    }
 }
 
 macro_rules! decl_bit_assign {

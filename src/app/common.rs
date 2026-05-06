@@ -1,8 +1,9 @@
 use anyhow::{anyhow, Context, Result};
 use clap::{Arg, ArgMatches};
 use decdnnf_rs::{
-    Assumptions, BinaryReader, BinaryWriter, C2dWriter, D4Reader, D4Writer, DecisionDNNF,
-    DecisionDNNFChecker, DecisionDNNFReader, DecisionDNNFWriter, Literal, SmartReader,
+    Assumptions, BinaryReader, BinaryWriter, C2dWriter, CNFFormula, D4Reader, D4Writer,
+    DecisionDNNF, DecisionDNNFChecker, DecisionDNNFReader, DecisionDNNFWriter, DimacsCNFReader,
+    Literal, SmartReader,
 };
 use log::{info, warn};
 use std::{
@@ -13,6 +14,7 @@ use std::{
 };
 
 const ARG_INPUT: &str = "ARG_INPUT";
+const ARG_INPUT_CNF: &str = "ARG_INPUT_CNF";
 const ARG_INPUT_FORMAT: &str = "ARG_INPUT_FORMAT";
 const ARG_N_VARS: &str = "ARG_N_VARS";
 const ARG_DO_NOT_CHECK_DDNNF: &str = "ARG_DO_NOT_CHECK_DDNNF";
@@ -87,6 +89,16 @@ pub(crate) fn read_assumptions(
     assumptions.map(|lits| Some(Assumptions::new(ddnnf.n_vars(), lits)))
 }
 
+pub(crate) fn arg_input_cnf<'a>() -> Arg<'a, 'a> {
+    Arg::with_name(ARG_INPUT_CNF)
+        .short("c")
+        .long("cnf")
+        .required(true)
+        .empty_values(false)
+        .multiple(false)
+        .help("the equivalent CNF formula")
+}
+
 pub(crate) fn read_input_ddnnf(arg_matches: &ArgMatches<'_>) -> Result<DecisionDNNF> {
     log_time_for_step("Decision-DNNF reading", || {
         read_input_ddnnf_step(arg_matches)
@@ -130,6 +142,20 @@ pub(crate) fn read_input_ddnnf_step(arg_matches: &ArgMatches<'_>) -> Result<Deci
     info!("number of nodes: {}", ddnnf.n_nodes());
     info!("number of edges: {}", ddnnf.n_edges());
     Ok(ddnnf)
+}
+
+pub(crate) fn read_input_cnf(arg_matches: &ArgMatches<'_>) -> Result<CNFFormula> {
+    log_time_for_step("CNF reading", || read_input_cnf_step(arg_matches))
+}
+
+pub(crate) fn read_input_cnf_step(arg_matches: &ArgMatches<'_>) -> Result<CNFFormula> {
+    let input_file_canonicalized = realpath_from_arg(arg_matches, ARG_INPUT_CNF)?;
+    info!("reading input file {:?}", input_file_canonicalized);
+    let file_reader = BufReader::new(File::open(input_file_canonicalized)?);
+    let cnf = DimacsCNFReader::read(file_reader).context("while parsing the input CNF")?;
+    info!("number of variables: {}", cnf.n_vars());
+    info!("number of clauses: {}", cnf.n_clauses());
+    Ok(cnf)
 }
 
 fn realpath_from_arg(arg_matches: &ArgMatches<'_>, arg: &str) -> Result<PathBuf> {

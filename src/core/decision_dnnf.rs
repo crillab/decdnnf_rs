@@ -211,7 +211,16 @@ impl DecisionDNNF {
     /// The number of variables considered in the subformula is the same as in the initial formula.
     #[must_use]
     pub fn subformula(&self, root: NodeIndex) -> Self {
-        SubformulaBuilder::build_from_new_root(self, root).into()
+        SubformulaBuilder::build_from_new_root(self, root, &mut SubformulaReusableDS::new()).into()
+    }
+
+    /// Creates a new (sub)formula from an existing one with a reusable datastructure.
+    pub(crate) fn subformula_with_internal_ds(
+        &self,
+        root: NodeIndex,
+        ds: &mut SubformulaReusableDS,
+    ) -> Self {
+        SubformulaBuilder::build_from_new_root(self, root, ds).into()
     }
 
     /// Updates the number of variables.
@@ -280,16 +289,60 @@ impl DecisionDNNF {
 
 struct SubformulaBuilder<'a> {
     formula: &'a DecisionDNNF,
-    old_to_new_node_index: Vec<Option<usize>>,
+    old_to_new_node_index: &'a mut SubformulaReusableDS,
     new_nodes: Vec<Node>,
     new_edges: Vec<Edge>,
 }
 
+pub(crate) struct SubformulaReusableDS {
+    stamp: usize,
+    data: Vec<(usize, usize)>,
+}
+
+impl SubformulaReusableDS {
+    pub(crate) fn new() -> Self {
+        Self {
+            stamp: 1,
+            data: vec![],
+        }
+    }
+
+    fn reset(&mut self, new_len: usize) {
+        if self.stamp == usize::MAX {
+            self.stamp = 1;
+            self.data = vec![(0, 0); new_len];
+        } else {
+            self.stamp += 1;
+            if new_len > self.data.len() {
+                self.data.resize(new_len, (0, 0));
+            }
+        }
+    }
+
+    fn set(&mut self, index: usize, value: usize) {
+        self.data[index] = (self.stamp, value);
+    }
+
+    fn get(&self, index: usize) -> Option<usize> {
+        let (data_stamp, value) = self.data[index];
+        if data_stamp == self.stamp {
+            Some(value)
+        } else {
+            None
+        }
+    }
+}
+
 impl<'a> SubformulaBuilder<'a> {
-    fn build_from_new_root(decision_dnnf: &'a DecisionDNNF, root: NodeIndex) -> Self {
+    fn build_from_new_root(
+        decision_dnnf: &'a DecisionDNNF,
+        root: NodeIndex,
+        old_to_new_node_index: &'a mut SubformulaReusableDS,
+    ) -> Self {
+        old_to_new_node_index.reset(decision_dnnf.n_nodes());
         let mut builder = Self {
             formula: decision_dnnf,
-            old_to_new_node_index: vec![None; decision_dnnf.n_nodes()],
+            old_to_new_node_index,
             new_nodes: vec![],
             new_edges: vec![],
         };
@@ -299,10 +352,15 @@ impl<'a> SubformulaBuilder<'a> {
     }
 
     fn copy_nodes_from(&mut self, old_index: NodeIndex) {
-        if self.old_to_new_node_index[usize::from(old_index)].is_some() {
+        if self
+            .old_to_new_node_index
+            .get(usize::from(old_index))
+            .is_some()
+        {
             return;
         }
-        self.old_to_new_node_index[usize::from(old_index)] = Some(self.new_nodes.len());
+        self.old_to_new_node_index
+            .set(usize::from(old_index), self.new_nodes.len());
         self.new_nodes.push(self.formula.nodes()[old_index].clone());
         match &self.formula.nodes()[old_index] {
             Node::And(edge_indices) | Node::Or(edge_indices) => {
@@ -320,7 +378,9 @@ impl<'a> SubformulaBuilder<'a> {
                 Node::And(edge_indices) | Node::Or(edge_indices) => {
                     for edge_index in edge_indices {
                         let mut new_edge = self.formula.edges()[*edge_index].clone();
-                        new_edge.target = self.old_to_new_node_index[usize::from(new_edge.target)]
+                        new_edge.target = self
+                            .old_to_new_node_index
+                            .get(usize::from(new_edge.target))
                             .unwrap()
                             .into();
                         *edge_index = self.new_edges.len().into();

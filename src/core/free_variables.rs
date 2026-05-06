@@ -10,10 +10,20 @@ use crate::{
 /// This function computes both kinds of free variables.
 ///
 /// Variables are encoded as literals, the polarity of which must be ignored.
+///
+/// The OR free variables are returned as a vector acting as a mapping from node indices to a structure (`Vec<Vec<Literal>>`) depicting the free variables when selecting a child of this node.
+/// If the index belongs to a node that is not a disjunction, the structure is an empty vector.
+/// In case the node is a disjunction, this vector is a mapping from the children indices to the variables that are free when this child is selected to form a model.
+///
+/// The root free variables are simply returned as a vector of literal.
+///
+/// The literals encoding the free variables are always the negative ones.
 #[derive(Debug, Clone)]
+#[allow(clippy::struct_field_names)]
 pub struct FreeVariables {
     root_free_vars: Vec<Literal>,
     or_free_vars: OrFreeVariables,
+    involved_vars: Vec<Option<InvolvedVars>>,
 }
 
 impl FreeVariables {
@@ -36,6 +46,7 @@ impl FreeVariables {
         Self {
             root_free_vars,
             or_free_vars: OrFreeVariables::build(or_free_vars),
+            involved_vars,
         }
     }
 
@@ -62,11 +73,17 @@ impl FreeVariables {
                 .copied()
                 .collect(),
             or_free_vars: self.or_free_vars.apply_assumptions(assumptions),
+            involved_vars: self.involved_vars.clone(),
         }
     }
 
     pub(crate) fn take(self) -> (Vec<Literal>, OrFreeVariables) {
         (self.root_free_vars, self.or_free_vars)
+    }
+
+    #[must_use]
+    pub(crate) fn involved_vars(&self, n: NodeIndex) -> &InvolvedVars {
+        self.involved_vars[usize::from(n)].as_ref().unwrap()
     }
 }
 

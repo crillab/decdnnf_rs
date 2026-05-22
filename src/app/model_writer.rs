@@ -90,22 +90,6 @@ where
         self.n_models += current_n_models;
     }
 
-    pub fn write_model_no_opt(&mut self, model: &[Literal]) {
-        self.n_enumerated += 1;
-        self.n_models += 1;
-        if self.do_not_print {
-            return;
-        }
-        for l in model {
-            if l.polarity() {
-                self.pattern[self.sign_location[l.var_index()]] = b' ';
-            } else {
-                self.pattern[self.sign_location[l.var_index()]] = b'-';
-            }
-        }
-        let _ = self.buf.write_all(&self.pattern);
-    }
-
     pub fn finalize(&mut self) {
         self.buf.flush().unwrap();
     }

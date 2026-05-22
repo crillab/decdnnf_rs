@@ -1,7 +1,7 @@
 use super::{cli_manager, common, model_writer::ModelWriter};
-use anyhow::{anyhow, Context};
+use anyhow::Context;
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
-use decdnnf_rs::{Literal, ModelEnumerator, ModelFinder, ParallelModelEnumerator};
+use decdnnf_rs::{ModelEnumerator, ParallelModelEnumerator};
 use log::info;
 use rug::Integer;
 use std::{
@@ -15,7 +15,6 @@ pub struct Command;
 const CMD_NAME: &str = "model-enumeration";
 
 const ARG_COMPACT_FREE_VARS: &str = "ARG_COMPACT_FREE_VARS";
-const ARG_DECISION_TREE: &str = "ARG_DECISION_TREE";
 const ARG_DO_NOT_PRINT: &str = "ARG_DO_NOT_PRINT";
 const ARG_THREADS: &str = "ARG_THREADS";
 
@@ -31,13 +30,6 @@ impl<'a> super::command::Command<'a> for Command {
             .args(&common::args_input())
             .arg(cli_manager::logging_level_cli_arg())
             .arg(arg_compact_free_vars())
-            .arg(
-                Arg::with_name(ARG_DECISION_TREE)
-                    .long("decision-tree")
-                    .takes_value(false)
-                    .conflicts_with(ARG_COMPACT_FREE_VARS)
-                    .help("enumerate by building a decision tree (should be less efficient)"),
-            )
             .arg(arg_do_not_print())
             .arg(
                 Arg::with_name(ARG_THREADS)
@@ -51,9 +43,7 @@ impl<'a> super::command::Command<'a> for Command {
     }
 
     fn execute(&self, arg_matches: &ArgMatches<'_>) -> anyhow::Result<()> {
-        if arg_matches.is_present(ARG_DECISION_TREE) {
-            enum_decision_tree(arg_matches)
-        } else if arg_matches.is_present(ARG_THREADS) {
+        if arg_matches.is_present(ARG_THREADS) {
             enum_default_parallel(arg_matches)
         } else {
             enum_default(arg_matches)
@@ -139,65 +129,6 @@ fn enum_default_parallel(arg_matches: &ArgMatches<'_>) -> anyhow::Result<()> {
             &writers.iter().map(ModelWriter::n_enumerated).sum(),
             &writers.iter().map(ModelWriter::n_models).sum(),
         );
-        Ok(())
-    })
-}
-
-#[deprecated(note = "inefficient algorithm used for comparison purpose")]
-fn enum_decision_tree(arg_matches: &ArgMatches<'_>) -> anyhow::Result<()> {
-    let ddnnf = common::read_input_ddnnf(arg_matches)?;
-    if common::read_assumptions(&ddnnf, arg_matches)?.is_some() {
-        return Err(anyhow!(
-            "decision-tree-based enumeration cannot use assumptions"
-        ));
-    }
-    common::log_time_for_step("model enumeration", || {
-        info!("model enumeration using a decision tree");
-        let mut model_writer = ModelWriter::new_locked(
-            ddnnf.n_vars(),
-            arg_matches.is_present(ARG_COMPACT_FREE_VARS),
-            arg_matches.is_present(ARG_DO_NOT_PRINT),
-        );
-        let model_finder = ModelFinder::new(&ddnnf);
-        let mut assumptions = Vec::with_capacity(ddnnf.n_vars());
-        let mut stack = Vec::with_capacity(ddnnf.n_vars() << 1);
-        let mut last_model = vec![];
-        let update_stack = |m: &[Literal], i, stack: &mut Vec<(bool, Literal)>| {
-            let shortcut_lit = *m.iter().find(|l| l.var_index() == i).unwrap();
-            stack.push((false, shortcut_lit.flip()));
-            stack.push((true, shortcut_lit));
-        };
-        if let Some(ref mut model) = model_finder.find_model() {
-            std::mem::swap(&mut last_model, model);
-            if ddnnf.n_vars() == 0 {
-                model_writer.write_model_no_opt(&[]);
-            } else {
-                update_stack(&last_model, 0, &mut stack);
-            }
-        }
-        while let Some((shortcut, lit)) = stack.pop() {
-            assumptions.truncate(lit.var_index());
-            assumptions.push(lit);
-            if shortcut {
-                if assumptions.len() == ddnnf.n_vars() {
-                    model_writer.write_model_no_opt(&last_model);
-                } else {
-                    update_stack(&last_model, assumptions.len(), &mut stack);
-                }
-            } else {
-                let mut opt_model = model_finder.find_model_under_assumptions(&assumptions);
-                if let Some(ref mut new_model) = opt_model {
-                    std::mem::swap(&mut last_model, new_model);
-                    if assumptions.len() == ddnnf.n_vars() {
-                        model_writer.write_model_no_opt(&last_model);
-                    } else {
-                        update_stack(&last_model, assumptions.len(), &mut stack);
-                    }
-                }
-            }
-        }
-        model_writer.finalize();
-        write_summary(&model_writer);
         Ok(())
     })
 }

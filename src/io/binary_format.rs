@@ -135,7 +135,7 @@ fn read_usize<R>(reader: &mut BufReader<R>) -> Result<usize>
 where
     R: Read,
 {
-    let mut buffer = [0_u8; size_of::<u64>()];
+    let mut buffer = [0_u8; std::mem::size_of::<u64>()];
     reader
         .read_exact(&mut buffer)
         .context("while reading a number")?;

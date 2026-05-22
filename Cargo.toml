@@ -2,13 +2,13 @@
 name = "decdnnf_rs"
 authors = ["Jean-Marie Lagniez <lagniez@cril.fr>", "Emmanuel Lonca <lonca@cril.fr>"]
 license = "GPL-3.0-or-later"
-version = "1.1.2"
+version = "2.0.0"
 description = "A library for Decision-DNNFs."
 categories = ["command-line-utilities", "science"]
 keywords = ["decision", "DNNF", "model", "counting", "enumeration"]
 homepage = "https://www.cril.univ-artois.fr/software/decdnnf-rs/"
 repository = "https://github.com/crillab/decdnnf_rs"
-rust-version = "1.77.0"
+rust-version = "1.77.2"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
